@@ -186,3 +186,7 @@ with service names and named squares in them)
 In the chores panel, you have to login user/pass that are the user/pass of the captain
 linux machine. The captain will check if it matches the paddwd linux file and if so
 will give you your consult and display the chores data + a button to cancel
+
+----------------- V1.4.1
+
+Use PORT flag to indicate to captain commands whate port the Captain is listening on

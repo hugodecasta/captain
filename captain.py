@@ -299,6 +299,56 @@ ACTIVE_STATUSES = {"pending", "assigned", "running", "cancel_requested"}
 TOKENS: Dict[str, Dict[str, Any]] = {}
 TOKEN_TTL = int(os.getenv("CAPTAIN_TOKEN_TTL", "3600"))
 
+# Serve flag file for local CLI discovery
+SERVE_FLAG_FILE = Path(os.getenv("CAPTAIN_FLAG_FILE", str(DATA_DIR / "serve.json")))
+
+
+def _write_serve_flag(port: int):
+    try:
+        SERVE_FLAG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        tmp = SERVE_FLAG_FILE.with_suffix(SERVE_FLAG_FILE.suffix + ".tmp")
+        with tmp.open("w") as f:
+            json.dump({
+                "port": int(port),
+                "pid": os.getpid(),
+                "started_at": now_ts(),
+            }, f)
+        os.replace(tmp, SERVE_FLAG_FILE)
+    except Exception as e:
+        logger.error(f"Failed to write serve flag: {e}")
+
+
+def _remove_serve_flag():
+    try:
+        if SERVE_FLAG_FILE.exists():
+            SERVE_FLAG_FILE.unlink()
+    except Exception:
+        # non-fatal
+        pass
+
+
+def _discover_base_url(timeout: float = 1.0) -> Optional[str]:
+    """Read the serve flag to discover the local base URL and verify reachability.
+    Returns base URL like 'http://127.0.0.1:<port>' or None if not reachable.
+    """
+    try:
+        if not SERVE_FLAG_FILE.exists():
+            return None
+        with SERVE_FLAG_FILE.open("r") as f:
+            data = json.load(f)
+        port = int(data.get("port"))
+        base = f"http://127.0.0.1:{port}"
+        # quick reachability probe
+        try:
+            r = requests.get(f"{base}/", timeout=timeout)
+            if r.status_code >= 200 and r.status_code < 500:
+                return base
+        except Exception:
+            return None
+    except Exception:
+        return None
+    return None
+
 
 def _parse_max_time(s: Optional[str]) -> int:
     """
@@ -831,7 +881,11 @@ def cli():
     if args.serve is not None:
         port = args.serve
         logger.info(f"Captain serving on 0.0.0.0:{port}")
-        uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
+        _write_serve_flag(port)
+        try:
+            uvicorn.run(app, host="0.0.0.0", port=port, log_level="info")
+        finally:
+            _remove_serve_flag()
         return
 
     if args.chore is not None:
@@ -841,6 +895,11 @@ def cli():
             if "=" in item:
                 k, v = item.split("=", 1)
                 kv[k.strip()] = v.strip()
+        base = _discover_base_url()
+        if not base:
+            msg = "Captain is not reachable."
+            print(json.dumps({"ok": False, "error": msg}) if json_last else msg)
+            return
         payload = {
             "script": kv.get("script"),
             "service": kv.get("service"),
@@ -850,7 +909,7 @@ def cli():
             },
             "owner": os.getuid(),
         }
-        url = f"http://127.0.0.1:8000/user_chore"
+        url = f"{base}/user_chore"
         try:
             resp = requests.post(url, json=payload, timeout=5)
             data = resp.json()
@@ -867,7 +926,12 @@ def cli():
         return
 
     if args.consult:
-        url = f"http://127.0.0.1:8000/user_consult?all={'true' if args.all else 'false'}"
+        base = _discover_base_url()
+        if not base:
+            msg = "Captain is not reachable."
+            print(json.dumps({"ok": False, "error": msg}) if json_last else msg)
+            return
+        url = f"{base}/user_consult?all={'true' if args.all else 'false'}"
         try:
             resp = requests.get(url, timeout=5)
             data = resp.json()
@@ -911,7 +975,12 @@ def cli():
         return
 
     if args.crew:
-        url = f"http://127.0.0.1:8000/crew"
+        base = _discover_base_url()
+        if not base:
+            msg = "Captain is not reachable."
+            print(json.dumps({"ok": False, "error": msg}) if json_last else msg)
+            return
+        url = f"{base}/crew"
         try:
             resp = requests.get(url, timeout=5)
             data = resp.json()
@@ -965,7 +1034,12 @@ def cli():
         return
 
     if getattr(args, "users", False):
-        url = f"http://127.0.0.1:8000/users"
+        base = _discover_base_url()
+        if not base:
+            msg = "Captain is not reachable."
+            print(json.dumps({"ok": False, "error": msg}) if json_last else msg)
+            return
+        url = f"{base}/users"
         try:
             resp = requests.get(url, timeout=5)
             data = resp.json()
@@ -1011,6 +1085,11 @@ def cli():
             out = {"ok": False, "error": "uid is required (uid=<uid>)"}
             print(json.dumps(out) if json_last else f"Error: {out['error']}")
             return
+        base = _discover_base_url()
+        if not base:
+            msg = "Captain is not reachable."
+            print(json.dumps({"ok": False, "error": msg}) if json_last else msg)
+            return
         payload = {
             "uid": kv.get("uid"),
         }
@@ -1025,7 +1104,7 @@ def cli():
                 payload["chores_limit"] = kv["chores_limit"]
         if "notes" in kv:
             payload["notes"] = kv["notes"]
-        url = f"http://127.0.0.1:8000/user_upsert"
+        url = f"{base}/user_upsert"
         try:
             resp = requests.post(url, json=payload, timeout=5)
             data = resp.json()
@@ -1042,7 +1121,12 @@ def cli():
         return
 
     if args.cancel is not None:
-        url = f"http://127.0.0.1:8000/user_cancel"
+        base = _discover_base_url()
+        if not base:
+            msg = "Captain is not reachable."
+            print(json.dumps({"ok": False, "error": msg}) if json_last else msg)
+            return
+        url = f"{base}/user_cancel"
         try:
             payload = {"chore_id": args.cancel}
             if args.reason:
@@ -1064,7 +1148,12 @@ def cli():
     if args.prereg is not None:
         name, ip = args.prereg
         services = [s.strip() for s in args.services.split(",") if s.strip()]
-        url = f"http://127.0.0.1:8000/prereg"
+        base = _discover_base_url()
+        if not base:
+            msg = "Captain is not reachable."
+            print(json.dumps({"ok": False, "error": msg}) if json_last else msg)
+            return
+        url = f"{base}/prereg"
         try:
             req = {"name": name, "ip": ip, "services": services}
             if args.max_time:
