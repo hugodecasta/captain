@@ -1,0 +1,164 @@
+body {
+    font-family: system-ui, Arial, sans-serif;
+    margin: 0;
+    background: #0b0e14;
+    color: #e0e6f1
+}
+
+header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: #121826;
+    border-bottom: 1px solid #283041
+}
+
+h1 {
+    margin: 0;
+    font-size: 18px;
+    color: #9cc0ff
+}
+
+nav .big {
+    font-size: 16px;
+    padding: 10px 16px;
+    margin-left: 8px;
+    background: #1e293b;
+    color: #e0e6f1;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    cursor: pointer
+}
+
+nav .big:hover {
+    background: #0ea5e9;
+    color: #071018;
+    border-color: #0ea5e9
+}
+
+.view {
+    padding: 16px
+}
+
+.hidden {
+    display: none
+}
+
+.tabs {
+    margin: 8px 0
+}
+
+.tab {
+    margin-right: 8px;
+    padding: 6px 10px;
+    background: #1f2937;
+    border: 1px solid #374151;
+    color: #d1d5db;
+    border-radius: 6px;
+    cursor: pointer
+}
+
+.tab.active {
+    background: #0ea5e9;
+    color: #071018;
+    border-color: #0ea5e9
+}
+
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 12px
+}
+
+.square {
+    position: relative;
+    border-radius: 8px;
+    padding: 8px;
+    text-align: center;
+    color: #0b0e14;
+    font-weight: bold
+}
+
+.square .name {
+    font-size: 13px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis
+}
+
+.square .status {
+    font-size: 11px;
+    opacity: .8
+}
+
+.square.green {
+    background: #22c55e
+}
+
+.square.yellow {
+    background: #f59e0b
+}
+
+.square.red {
+    background: #ef4444
+}
+
+.square.grey {
+    background: #9ca3af
+}
+
+.tooltip {
+    position: absolute;
+    /* left/top are set via JS to avoid viewport overflow */
+    background: #111827;
+    color: #e5e7eb;
+    padding: 8px;
+    border: 1px solid #374151;
+    border-radius: 6px;
+    white-space: nowrap;
+    display: none;
+    z-index: 10
+}
+
+.square:hover .tooltip {
+    display: block
+}
+
+#chores-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 12px
+}
+
+#chores-table th,
+#chores-table td {
+    border-bottom: 1px solid #334155;
+    padding: 8px;
+    text-align: left;
+    font-size: 14px
+}
+
+.msg {
+    margin-left: 8px;
+    font-size: 12px;
+    opacity: .8
+}
+
+.toolbar {
+    margin: 8px 0
+}
+
+button.small {
+    padding: 4px 8px;
+    font-size: 12px;
+    border-radius: 6px;
+    border: 1px solid #334155;
+    background: #1f2937;
+    color: #e5e7eb
+}
+
+button.small:hover {
+    background: #ef4444;
+    border-color: #ef4444
+}

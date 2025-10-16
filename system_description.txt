@@ -1,0 +1,188 @@
+----------------- V1.0.0
+
+The Captain system is a ressource scheduler system
+it as one captain a machine on an IP addr running the Captain program and a crew, designated by multiple sailors
+Those sailors are machines with their IP addr running the Sailor program.
+When opening up the sailor program on a new node, a prompt asks the captain IP and its sailor ressources
+the ressources are CPU count, GPUS (type/Vram) and RAM. Once inputed, those data are stored in a JSON in the sailor
+When the sailor wakes up, it notifies the captain that it is ready to do work.
+The captain keeps a registry of all sailor. If a sailor calls him but its IP is not a the crew list, the call is
+rejected. Thus the admin must keep a crew list IP of all authorized sailors.
+In this crew file, we have the sailor name, and its IP adresse.
+sailor=<name> IP=<ip> services=<S1,S2,...>
+
+all other data is kept by the captain in a dict inside its program. Those data are given by the sailor when calling
+for the captain.
+The sailor basically gives its ressources
+cpus=<number>
+gpus=<type:vram,type:vram,...>
+ram=<amount un bytes>
+
+The Captain and Sailor programs are server programs so anyone can call anyone
+Someone can connect to the captain machine and type a command to execute a chore.
+This will trigger a hierarchical order from the captain to a sailor.
+This call must have the following parameters:
+script=<path to script>
+service=<service name> OR sailor=<sailor name>
+optional : cpus=<amount> default = 1
+optional : gpus=<amount> default = None
+
+with those parameters, the captain will find the sailor and give him the chore.
+The captain keeps a registry of its crew chores and often goes to the crew asking for the chore's completion
+This registry is kept in a perene file so it stays even if the captain is restarted.
+In this file we have the sailor executing the chore, the chore ID and other infos like start time.
+chore=<choreid> sailor=<sailor name> start=<timestamp> cpus=<amount taken> gpus=<amount>
+
+So if a chore is required by a connected user, the captain look in its chore registry to see match an available sailor
+If no sailor is available, the chore stays in the registry with none sailor assigned.
+Whenever a chore is done, all chores in the registry with no sailor attached are examined for attribution,
+if no sailor is available for the chore, it stays in the registry at its place.
+
+When a matching sailor is found, the captain calls im (server to server) and assign the chore (script, ressources, etc)
+By the way the chore id is set whenever the chore is asked by the user
+Then the sailor executes the chore. The sailor executes the process with GPU and CPU limitation based on the chore
+parameters and keeps its own registry about the doing chores (process id / chore id / chore data).
+A sailor can be given multiple chores if the captain estimated it still has ressources.
+BUT if a sailor for some reason think it cannot do the chore it can answer no or no answer at all.
+
+Here is a typical sailor registering process
+Sailor admin : open the sailor program which prompt for data
+Sailor admin : puts data (Captain IP, ressources, etc.)
+Sailor : asks captain to be registered
+Captain : refuses cause not on the registry.
+Captain admin : puts the sailor on registry (using captain commands)
+Sailor : continues regularly asking to be registered
+Captain : Now accepts to registrer the sailor and get its data.
+
+Here is a typical user wanting a chore.
+A central disk as been setup and all sailors and captain have it mounted on /mnt/boat
+The user puts a exec.sh in /mnt/boat/user_owned_folder/exec.sh
+user connected on Captain : dochore script=/mnt/boat/user_owned_folder/exec.sh service=GPU cpus=2 gpus=1
+Captain assignes chore_id 1234 to the chore and store its parameters and user UID in the registry (the chore)
+Captain retrieves all sailor in the service (from the registry), check their alrady assigned chore and ressources
+from the chore registry and remove all sailors that have less ressources than asked
+The Captain finds one sailor available
+Captain to sailor : execute this chore (chore data, id, ressources, user UID, etc.)
+Sailor execute the chore in name of the UID (sudo with down right) and saves the mapped PID/chore_ID in its own registry
+Sailor : ok
+
+Regularly (every 500ms):
+Sailor checks its process, and report to the captain
+Sailor : Chore (chore_id,...) status = Done
+Captain = ok
+Sailor removes from its chores registry (only when captain says OK, if not, the captain did not ear so the sailor 
+as to repeat)
+Ccaptain removes the chore from the registry
+
+So basiclly multiple files:
+ - Captain
+    - crew registry (sailor name, ip, ressources)
+        - json dict {<name>:{name:string, ip:string, cpus:int, gpus:[{type:string,vram:int}],ram:int, last_seen:int, status:string}}
+        A sailor a name and IP only setup by the admin then the ressources are filled by the sailor itself
+        If a sailor last seen (existance report) is more than 10 seconds, the sailor status goes to down
+        status are idle, down, busy, full
+    - chores registry (chore_id, ressource needed, assigned sailor, owner UID)
+        - json dict {<chore_id>:{chore_id:string, ressources:{cpus,gpus}, sailor:null|string, owner:UID, status:string}}
+ - Sailor
+    - ressource data (saved when first prompted)
+    - chores registry
+        - json dict {<chore_id>:{chore_id:string,pid:string}}
+
+And multiple endpoints
+ - Captain
+    - sailor_register (for a sailor to say it exists)
+    - sailor_awake (for the sailor to report existance)
+    - sailor_report (for the sailor to report a chore status)
+    - user_chore (for a user to ask for a chore)
+    - user_consult (for a user to consult its chore status)
+    - user_cancel (for a user to cancel a chore) (the captain instruct the sailor to cancel the chore, the
+    sailor simply removes the process and report a canceld chore or if no sailor is attached, simply
+     removes from the registry)
+ - Sailor
+    - captain_request (for the captain to request a chore)
+    - captain_cancels (for the captain to ask the canelation of a chore)
+
+The captain system is just a captain.py script that can be opened with multiple parameters
+Parameters:
+ - Captain
+    - python captain.py --serve <PORT> (opens the captain program and serves it)
+    - python captain.py --chore script=<path> service=<service> ... (launch a chore request)
+    - python captain.py --consult (consult ones UID chores) with --all paramerter to get all only for sudo
+    - python captain.py --cancel <chore_id> (cancels a chore)
+    - python captain.py --prereg name IP (preregisters a sailor name and IP for later)
+ - Sailor
+    - python sailor.py (opens the sailor for the first time with data prompt but does not open the server)
+    - python sailor.py --serve <PORT> (launch the sailor)
+
+an alias to "captain" will redirect to the python3 captain.py file same for sailor
+a setup.py will setup the system, create a varenv, install requirements in it and create the alias
+The alias should also activate the varenv alias captain="source <path>/.captainenv/bin/activate; <path>/captain.py"
+setup.py --captain or --sailor that will create the source lines for alias and happend them in the current user bashrc
+
+----------------- V1.1.0
+
+When using the captain command with crew (captain --crew) you get the crews status
+all sailors, status, ressources, etc.
+
+----------------- V1.1.1
+
+All done or failed or candled chores must be removed from the captain's registry after
+2 minutes of terminated status.
+
+Also all captain commands are actually a cli wrapper for the captain's server endpoints
+The endpoints answer using json and the wrapper just take that json and beautify it to
+put it in the shell with header and all, but all those command will only display json if
+the user put --json as the last parameter
+
+----------------- V1.2.0
+
+Some sailors that are heavily sollicitated cannot be taken by chores more than some specific
+time. Thus, it is possible to ass a maxtime string in the crew registry for some sailors
+The max_time proprerty is DD-hh:mm:ss
+The Captain will make sure no chore exceed its sailor max time
+
+Also when a chore is altered (canceled) by the captain, the captain will record
+a string reason in the chore registry (ex. reason:"canceled by user", "exceeded time limit", etc.)
+This reason flag is also setup at the begining of the chore creation by the captain to indicate
+for example why the chore is pending (usually "no available sailor")
+
+----------------- V1.2.1
+
+Fix chores being failed when actually canceled by user or captain.
+And they should have a reason
+
+----------------- V1.3.0
+
+Create a user registry in which we can limit the user in its doing
+Here are the properties we can put:
+ - time limit (max time for all its chores)
+ - chores limit (max number of chores)
+ - notes (quick notes by the admin in the need of justifications)
+
+in a user registry users.json {<UID>:{name:string, uid:string, time_limit:TIME_FORMAT, chores_limit:int, notes:string}}
+Implementation details:
+- New file: data/captain/users.json. Keys are UID strings.
+- On chore submission, Captain rejects when user's chores_limit is reached (active chores only).
+- Cleanup loop enforces per-user time_limit by cancel-requesting newest chores beyond the allowed cumulative budget and setting the chore reason to "exceeded user time limit".
+- Minimal API endpoints:
+    - GET /users: list users
+    - POST /user_upsert: create/update a user record {uid,name,time_limit,chores_limit,notes}
+- CLI helpers:
+    - captain --users: display users
+    - captain --user-set uid=... name=... time_limit=... chores_limit=... notes=...
+
+----------------- V1.4.0
+
+Create a front app served over the captain's main endpoint "/" end which front
+file can be accessed through /front/main.js for example.
+When you go on the page you have to big buttons "cluster" and "chores"
+the cluster leads you to the clusterma view
+Each sailor is represented by a square with colors (green is idle, yeallow is used,
+red is fully used, grey is down), when you pass your mouse over you have panel opening on
+top of the square that shows the infos of the sailor
+You can see the cluster by sailors (list of squares with names) or by service (panels
+with service names and named squares in them)
+
+In the chores panel, you have to login user/pass that are the user/pass of the captain
+linux machine. The captain will check if it matches the paddwd linux file and if so
+will give you your consult and display the chores data + a button to cancel

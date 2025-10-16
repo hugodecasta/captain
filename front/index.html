@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Captain</title>
+    <link rel="stylesheet" href="/front/styles.css" />
+</head>
+
+<body>
+    <div id="app">
+        <header>
+            <h1>Captain</h1>
+            <nav>
+                <button id="btn-cluster" class="big">Cluster</button>
+                <button id="btn-chores" class="big">Chores</button>
+            </nav>
+        </header>
+
+        <main>
+            <section id="view-cluster" class="view hidden">
+                <div class="tabs">
+                    <button data-tab="sailors" class="tab active">By Sailors</button>
+                    <button data-tab="services" class="tab">By Services</button>
+                </div>
+                <div id="cluster-sailors" class="tab-content"></div>
+                <div id="cluster-services" class="tab-content hidden"></div>
+            </section>
+
+            <section id="view-chores" class="view hidden">
+                <div id="login-panel">
+                    <h2>Login</h2>
+                    <form id="login-form">
+                        <label>Username <input type="text" name="username" required /></label>
+                        <label>Password <input type="password" name="password" required /></label>
+                        <button type="submit">Login</button>
+                        <span id="login-msg" class="msg"></span>
+                    </form>
+                </div>
+                <div id="chores-panel" class="hidden">
+                    <div class="toolbar">
+                        <button id="refresh-chores">Refresh</button>
+                    </div>
+                    <table id="chores-table">
+                        <thead>
+                            <tr>
+                                <th>Chore ID</th>
+                                <th>Status</th>
+                                <th>Sailor</th>
+                                <th>CPUs</th>
+                                <th>GPUs</th>
+                                <th>Reason</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div>
+    <script src="/front/main.js"></script>
+</body>
+
+</html>
