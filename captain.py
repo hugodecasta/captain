@@ -303,50 +303,141 @@ TOKEN_TTL = int(os.getenv("CAPTAIN_TOKEN_TTL", "3600"))
 SERVE_FLAG_FILE = Path(os.getenv("CAPTAIN_FLAG_FILE", str(DATA_DIR / "serve.json")))
 
 
+def _xdg_path(kind: str) -> Path:
+    """Return an XDG-compliant path for storing the serve flag.
+    kind: one of {"state", "data", "runtime"}
+    """
+    home = Path.home()
+    if kind == "state":
+        base = Path(os.getenv("XDG_STATE_HOME", str(home / ".local" / "state")))
+    elif kind == "data":
+        base = Path(os.getenv("XDG_DATA_HOME", str(home / ".local" / "share")))
+    else:  # runtime
+        base = Path(os.getenv("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"))
+    return base / "captain" / "serve.json"
+
+
+def _candidate_flag_files() -> List[Path]:
+    """Return a prioritized list of serve flag file locations to try.
+    Order:
+      1) CAPTAIN_FLAG_FILE env (if set)
+      2) repo data dir (current default)
+      3) XDG_STATE_HOME, XDG_DATA_HOME, XDG_RUNTIME_DIR
+      4) /var/run/captain/serve.json
+      5) /tmp/captain_serve.json
+    """
+    out: List[Path] = []
+    # 1) explicit env (already reflected in SERVE_FLAG_FILE)
+    out.append(SERVE_FLAG_FILE)
+    # 2) repo data dir (ensure it's in even if env overrides elsewhere)
+    out.append(DATA_DIR / "serve.json")
+    # 3) XDG locations
+    out.extend([_xdg_path("state"), _xdg_path("data"), _xdg_path("runtime")])
+    # 4) system run dir
+    out.append(Path("/var/run/captain/serve.json"))
+    # 5) tmp fallback
+    out.append(Path("/tmp/captain_serve.json"))
+    # Deduplicate while preserving order
+    seen = set()
+    uniq: List[Path] = []
+    for p in out:
+        s = str(p)
+        if s not in seen:
+            seen.add(s)
+            uniq.append(p)
+    return uniq
+
+
 def _write_serve_flag(port: int):
-    try:
-        SERVE_FLAG_FILE.parent.mkdir(parents=True, exist_ok=True)
-        tmp = SERVE_FLAG_FILE.with_suffix(SERVE_FLAG_FILE.suffix + ".tmp")
-        with tmp.open("w") as f:
-            json.dump({
-                "port": int(port),
-                "pid": os.getpid(),
-                "started_at": now_ts(),
-            }, f)
-        os.replace(tmp, SERVE_FLAG_FILE)
-    except Exception as e:
-        logger.error(f"Failed to write serve flag: {e}")
+    payload = {
+        "port": int(port),
+        "pid": os.getpid(),
+        "started_at": now_ts(),
+    }
+    errors: List[str] = []
+    for path in _candidate_flag_files():
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp = path.with_suffix(path.suffix + ".tmp")
+            with tmp.open("w") as f:
+                json.dump(payload, f)
+            os.replace(tmp, path)
+        except Exception as e:
+            # collect errors but keep trying others
+            errors.append(f"{path}: {e}")
+    if errors and len(errors) == len(_candidate_flag_files()):
+        logger.error(f"Failed to write serve flag to any location: {errors}")
 
 
 def _remove_serve_flag():
-    try:
-        if SERVE_FLAG_FILE.exists():
-            SERVE_FLAG_FILE.unlink()
-    except Exception:
-        # non-fatal
-        pass
+    for path in _candidate_flag_files():
+        try:
+            if path.exists():
+                path.unlink()
+        except Exception:
+            # non-fatal
+            pass
 
 
 def _discover_base_url(timeout: float = 1.0) -> Optional[str]:
-    """Read the serve flag to discover the local base URL and verify reachability.
-    Returns base URL like 'http://127.0.0.1:<port>' or None if not reachable.
+    """Discover Captain base URL.
+    Precedence:
+      1) CAPTAIN_URL env (full base, e.g. http://host:port)
+      2) CAPTAIN_HOST/CAPTAIN_PORT env
+      3) Serve flag files in multiple locations
+      4) Fallback probe of common local ports
+    Returns base URL or None if not reachable.
     """
-    try:
-        if not SERVE_FLAG_FILE.exists():
-            return None
-        with SERVE_FLAG_FILE.open("r") as f:
-            data = json.load(f)
-        port = int(data.get("port"))
-        base = f"http://127.0.0.1:{port}"
-        # quick reachability probe
+    # 1) Full URL override
+    env_url = os.getenv("CAPTAIN_URL")
+    if env_url:
+        base = env_url if env_url.startswith("http") else f"http://{env_url}"
         try:
             r = requests.get(f"{base}/", timeout=timeout)
-            if r.status_code >= 200 and r.status_code < 500:
+            if 200 <= r.status_code < 500:
                 return base
         except Exception:
-            return None
-    except Exception:
-        return None
+            pass
+
+    # 2) Host/Port override
+    host = os.getenv("CAPTAIN_HOST") or "127.0.0.1"
+    port_env = os.getenv("CAPTAIN_PORT")
+    if port_env and port_env.isdigit():
+        base = f"http://{host}:{int(port_env)}"
+        try:
+            r = requests.get(f"{base}/", timeout=timeout)
+            if 200 <= r.status_code < 500:
+                return base
+        except Exception:
+            pass
+
+    # 3) Serve flag files
+    for path in _candidate_flag_files():
+        try:
+            if not path.exists():
+                continue
+            with path.open("r") as f:
+                data = json.load(f)
+            port = int(data.get("port"))
+            base = f"http://127.0.0.1:{port}"
+            try:
+                r = requests.get(f"{base}/", timeout=timeout)
+                if 200 <= r.status_code < 500:
+                    return base
+            except Exception:
+                continue
+        except Exception:
+            continue
+
+    # 4) Fallback: try a few common local ports quickly
+    for p in (8000, 9000, 9874):
+        base = f"http://127.0.0.1:{p}"
+        try:
+            r = requests.get(f"{base}/", timeout=0.5)
+            if 200 <= r.status_code < 500:
+                return base
+        except Exception:
+            continue
     return None
 
 

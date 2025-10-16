@@ -199,3 +199,7 @@ A setup service (--captain and --sailor) is created to setup and enable the serv
 This setup asks for ports
 Fot the sailor if no ressource exists it first calls the prompt script so the admin
 can setup the sailor
+
+----------------- V1.5.1
+
+Maybe because of the new service system, the flag port is not set anymore

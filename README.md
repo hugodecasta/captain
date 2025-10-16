@@ -40,6 +40,22 @@ A minimal resource scheduler with a Captain (controller) and Sailors (workers).
 
   captain --cancel 123456789 --reason "canceled by user"
 
+### CLI server discovery
+
+The `captain` CLI automatically discovers the running server in a few ways:
+
+- CAPTAIN_URL=http://host:port (highest priority)
+- CAPTAIN_HOST and CAPTAIN_PORT
+- Serve flag files written by `--serve` in multiple standard locations:
+  - data/captain/serve.json (in repo)
+  - $XDG_STATE_HOME/captain/serve.json
+  - $XDG_DATA_HOME/captain/serve.json
+  - $XDG_RUNTIME_DIR/captain/serve.json
+  - /var/run/captain/serve.json
+  - /tmp/captain_serve.json
+
+This allows running `captain --crew` from any directory after the server has been started, without needing to be in the repository folder.
+
 ## Systemd services
 
 Create and enable systemd services (will prompt for ports and use sudo):
