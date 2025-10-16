@@ -40,6 +40,26 @@ A minimal resource scheduler with a Captain (controller) and Sailors (workers).
 
   captain --cancel 123456789 --reason "canceled by user"
 
+## Systemd services
+
+Create and enable systemd services (will prompt for ports and use sudo):
+
+  # Captain service (defaults to port 8000)
+  python3 setup_service.py --captain
+
+  # Sailor service (runs first-time prompt if resources missing; defaults to port from resources.json or 8001)
+  python3 setup_service.py --sailor
+
+You can override ports and user:
+
+  python3 setup_service.py --captain --port 9000 --user $(whoami)
+  python3 setup_service.py --sailor --port 9001 --user $(whoami)
+
+Check logs:
+
+  sudo journalctl -u captain -f
+  sudo journalctl -u sailor -f
+
 ## Data
 
 - Captain data: data/captain/crew.json and data/captain/chores.json

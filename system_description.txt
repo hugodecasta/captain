@@ -190,3 +190,12 @@ will give you your consult and display the chores data + a button to cancel
 ----------------- V1.4.1
 
 Use PORT flag to indicate to captain commands whate port the Captain is listening on
+
+----------------- V1.5.0
+
+Create services that can be setup for captain and sailor.
+The service files are prewritten with path and port placeholders 
+A setup service (--captain and --sailor) is created to setup and enable the service using sudo
+This setup asks for ports
+Fot the sailor if no ressource exists it first calls the prompt script so the admin
+can setup the sailor
