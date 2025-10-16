@@ -1091,7 +1091,11 @@ def cli():
             msg = "Captain is not reachable."
             print(json.dumps({"ok": False, "error": msg}) if json_last else msg)
             return
-        url = f"{base}/user_consult?all={'true' if args.all else 'false'}"
+        # Inject caller UID when not requesting all, so server returns the caller's chores
+        if args.all:
+            url = f"{base}/user_consult?all=true"
+        else:
+            url = f"{base}/user_consult?all=false&owner={os.getuid()}"
         try:
             resp = requests.get(url, timeout=5)
             data = resp.json()
