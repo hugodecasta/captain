@@ -11,11 +11,22 @@ BASHRC = Path.home() / ".bashrc"
 
 ALIASES = f"""
 # Captain/Sailor aliases (added by setup.py)
+# Remove any pre-existing alias definitions that might break argument passing
+unalias captain 2>/dev/null || true
+unalias sailor 2>/dev/null || true
+
 function captain() {{
-  source "{VENV_DIR}/bin/activate" && python "{ROOT}/captain.py" "$@"
+    # activate venv if present, then run script with all args preserved
+    if [ -f "{VENV_DIR}/bin/activate" ]; then
+        source "{VENV_DIR}/bin/activate"
+    fi
+    python "{ROOT}/captain.py" "$@"
 }}
 function sailor() {{
-  source "{VENV_DIR}/bin/activate" && python "{ROOT}/sailor.py" "$@"
+    if [ -f "{VENV_DIR}/bin/activate" ]; then
+        source "{VENV_DIR}/bin/activate"
+    fi
+    python "{ROOT}/sailor.py" "$@"
 }}
 """
 

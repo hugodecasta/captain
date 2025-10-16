@@ -44,8 +44,15 @@ A minimal resource scheduler with a Captain (controller) and Sailors (workers).
 
 The `captain` CLI automatically discovers the running server in a few ways:
 
-- CAPTAIN_URL=http://host:port (highest priority)
-- CAPTAIN_HOST and CAPTAIN_PORT
+- CLI overrides (highest priority):
+  - --url http://host:port
+  - --host HOST --port PORT
+- Environment variables:
+  - CAPTAIN_URL=http://host:port
+  - CAPTAIN_HOST and CAPTAIN_PORT
+- Config file:
+  - $XDG_CONFIG_HOME/captain/config.json or ~/.config/captain/config.json
+    - {"url": "http://host:port"} or {"host": "host", "port": 8000}
 - Serve flag files written by `--serve` in multiple standard locations:
   - data/captain/serve.json (in repo)
   - $XDG_STATE_HOME/captain/serve.json

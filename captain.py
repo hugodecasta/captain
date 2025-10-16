@@ -302,6 +302,11 @@ TOKEN_TTL = int(os.getenv("CAPTAIN_TOKEN_TTL", "3600"))
 # Serve flag file for local CLI discovery
 SERVE_FLAG_FILE = Path(os.getenv("CAPTAIN_FLAG_FILE", str(DATA_DIR / "serve.json")))
 
+# CLI override variables (set in cli())
+CLI_URL_OVERRIDE: Optional[str] = None
+CLI_HOST_OVERRIDE: Optional[str] = None
+CLI_PORT_OVERRIDE: Optional[int] = None
+
 
 def _xdg_path(kind: str) -> Path:
     """Return an XDG-compliant path for storing the serve flag.
@@ -379,6 +384,31 @@ def _remove_serve_flag():
             pass
 
 
+def _config_url() -> Optional[str]:
+    """Read user config for default captain url/host/port.
+    Looks at $XDG_CONFIG_HOME/captain/config.json or ~/.config/captain/config.json
+    Schema: {"url": "http://host:port"} or {"host": "...", "port": 8000}
+    """
+    try:
+        cfg_home = Path(os.getenv("XDG_CONFIG_HOME", str(Path.home() / ".config")))
+        cfg_file = cfg_home / "captain" / "config.json"
+        if not cfg_file.exists():
+            return None
+        with cfg_file.open("r") as f:
+            data = json.load(f)
+        if isinstance(data, dict):
+            url = data.get("url")
+            if url:
+                return url if str(url).startswith("http") else f"http://{url}"
+            host = data.get("host")
+            port = data.get("port")
+            if host and port:
+                return f"http://{host}:{int(port)}"
+    except Exception:
+        return None
+    return None
+
+
 def _discover_base_url(timeout: float = 1.0) -> Optional[str]:
     """Discover Captain base URL.
     Precedence:
@@ -388,7 +418,25 @@ def _discover_base_url(timeout: float = 1.0) -> Optional[str]:
       4) Fallback probe of common local ports
     Returns base URL or None if not reachable.
     """
-    # 1) Full URL override
+    # 0) CLI overrides
+    if CLI_URL_OVERRIDE:
+        base = CLI_URL_OVERRIDE if CLI_URL_OVERRIDE.startswith("http") else f"http://{CLI_URL_OVERRIDE}"
+        try:
+            r = requests.get(f"{base}/", timeout=timeout)
+            if 200 <= r.status_code < 500:
+                return base
+        except Exception:
+            pass
+    if CLI_HOST_OVERRIDE and CLI_PORT_OVERRIDE:
+        base = f"http://{CLI_HOST_OVERRIDE}:{int(CLI_PORT_OVERRIDE)}"
+        try:
+            r = requests.get(f"{base}/", timeout=timeout)
+            if 200 <= r.status_code < 500:
+                return base
+        except Exception:
+            pass
+
+    # 1) Full URL override (env)
     env_url = os.getenv("CAPTAIN_URL")
     if env_url:
         base = env_url if env_url.startswith("http") else f"http://{env_url}"
@@ -411,7 +459,18 @@ def _discover_base_url(timeout: float = 1.0) -> Optional[str]:
         except Exception:
             pass
 
-    # 3) Serve flag files
+    # 3) Config file
+    cfg = _config_url()
+    if cfg:
+        base = cfg
+        try:
+            r = requests.get(f"{base}/", timeout=timeout)
+            if 200 <= r.status_code < 500:
+                return base
+        except Exception:
+            pass
+
+    # 4) Serve flag files
     for path in _candidate_flag_files():
         try:
             if not path.exists():
@@ -429,7 +488,7 @@ def _discover_base_url(timeout: float = 1.0) -> Optional[str]:
         except Exception:
             continue
 
-    # 4) Fallback: try a few common local ports quickly
+    # 5) Fallback: try a few common local ports quickly
     for p in (8000, 9000, 9874):
         base = f"http://127.0.0.1:{p}"
         try:
@@ -959,6 +1018,10 @@ def cli():
     group.add_argument("--crew", action="store_true", help="Display crew status and resources")
     group.add_argument("--users", action="store_true", help="Display users registry")
     group.add_argument("--user-set", nargs="+", metavar="key=value", help="Create/update a user: uid= name= time_limit= chores_limit= notes=")
+    # Discovery overrides
+    parser.add_argument("--url", dest="url", default=None, help="Captain base URL (e.g. http://host:port)")
+    parser.add_argument("--host", dest="host", default=None, help="Captain host (used with --port)")
+    parser.add_argument("--port", dest="port", type=int, default=None, help="Captain port (used with --host)")
     parser.add_argument("--services", default="", help="Comma-separated services for prereg (with --prereg)")
     parser.add_argument("--max-time", dest="max_time", default=None, help="Optional max time for each chore on this sailor (DD-hh:mm:ss) with --prereg")
     parser.add_argument("--all", action="store_true", help="With --consult, show all chores")
@@ -966,6 +1029,12 @@ def cli():
     parser.add_argument("--reason", default=None, help="Optional reason string (used with --cancel)")
 
     args = parser.parse_args()
+
+    # set CLI overrides for discovery
+    global CLI_URL_OVERRIDE, CLI_HOST_OVERRIDE, CLI_PORT_OVERRIDE
+    CLI_URL_OVERRIDE = args.url
+    CLI_HOST_OVERRIDE = args.host
+    CLI_PORT_OVERRIDE = args.port
 
     json_last = ("--json" in sys.argv and sys.argv[-1] == "--json" and getattr(args, "json", False))
 
