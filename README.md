@@ -4,11 +4,25 @@ A minimal resource scheduler with a Captain (controller) and Sailors (workers).
 
 ## Setup
 
-1. Create a venv, install deps, and install system-wide CLI wrappers (no aliases):
+### One-line system-wide install (/opt)
+
+This installs the project under `/opt/captain`, creates a dedicated virtualenv, installs dependencies, and exposes `captain` and `sailor` globally in `/usr/local/bin`.
+
+  ./install.sh
+
+You’ll be prompted for sudo if not already root.
+
+Notes:
+- Data lives under `/opt/captain/data`. By default the installer makes it world-writable for convenience across users. For stricter setups, chown/chgrp to a dedicated group and tighten permissions, then run via systemd.
+- If your system lacks the venv module, install it first (Debian/Ubuntu): `sudo apt install python3-venv`.
+
+### Developer/local setup
+
+Create a venv, install deps, and install CLI wrappers into a suitable bin dir (no aliases):
 
   python3 setup.py
 
-  This creates .captainenv and installs `captain` and `sailor` executables in /usr/local/bin (or a fallback like ~/.local/bin if not writable). Use --prefix to choose a directory, or --no-venv to skip venv.
+This creates `.captainenv` at the project root and installs `captain` and `sailor` wrappers in `/usr/local/bin` (or a fallback like `~/.local/bin` if not writable). Use `--prefix` to choose a directory, or `--no-venv` to skip venv.
 
 ## Run
 
