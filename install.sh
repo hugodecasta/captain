@@ -93,7 +93,7 @@ install_wrapper() {
 #!/usr/bin/env bash
 set -euo pipefail
 VENV_PY="$VENV_DIR/bin/python"
-exec "\${VENV_PY}" "$INSTALL_DIR/$target" "$@"
+exec "\${VENV_PY}" "$INSTALL_DIR/$target" "\$@"
 EOF
   chmod 0755 "$wrapper"
   echo "Installed wrapper: $wrapper"
