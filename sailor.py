@@ -121,6 +121,7 @@ def captain_request(payload: Dict[str, Any]):
     chore_id = str(payload.get("chore_id"))
     script = payload.get("script")
     ressources = payload.get("ressources", {})
+    out_file = payload.get("out")
     if not chore_id or not script:
         raise HTTPException(400, "chore_id and script required")
     if chore_id in proc_by_chore:
@@ -135,11 +136,25 @@ def captain_request(payload: Dict[str, Any]):
 
     # run script as current user; assume script is executable
     try:
-        popen = psutil.Popen(["/bin/bash", script], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        stdout_target = subprocess.DEVNULL
+        stderr_target = subprocess.DEVNULL
+        out_fh = None
+        if out_file:
+            try:
+                out_path = Path(str(out_file)).expanduser()
+                out_path.parent.mkdir(parents=True, exist_ok=True)
+                # open in append mode to accumulate output
+                out_fh = out_path.open("ab", buffering=0)
+                stdout_target = out_fh
+                stderr_target = out_fh
+            except Exception as e:
+                logger.warning(f"Failed to open out file {out_file}: {e}. Falling back to PIPE.")
+                out_fh = None
+        popen = psutil.Popen(["/bin/bash", script], env=env, stdout=stdout_target, stderr=stderr_target)
         proc_by_chore[chore_id] = popen
-        running[chore_id] = {"chore_id": chore_id, "pid": popen.pid, "start": int(time.time()), "cancel_requested": False}
+        running[chore_id] = {"chore_id": chore_id, "pid": popen.pid, "start": int(time.time()), "cancel_requested": False, **({"out": str(out_file)} if out_file else {})}
         save_running(running)
-        threading.Thread(target=_watch_process, args=(chore_id,), daemon=True).start()
+        threading.Thread(target=_watch_process, args=(chore_id, out_fh), daemon=True).start()
         return {"ok": True}
     except Exception as e:
         logger.error(f"Failed to start chore {chore_id}: {e}")
@@ -181,7 +196,7 @@ def captain_cancel(payload: Dict[str, Any]):
 # background watchers and reporting
 
 
-def _watch_process(chore_id: str):
+def _watch_process(chore_id: str, out_fh=None):
     conf = load_conf()
     p = proc_by_chore.get(chore_id)
     if not p:
@@ -205,6 +220,12 @@ def _watch_process(chore_id: str):
         proc_by_chore.pop(chore_id, None)
         running.pop(chore_id, None)
         save_running(running)
+        try:
+            if out_fh:
+                out_fh.flush()
+                out_fh.close()
+        except Exception:
+            pass
 
 
 def _report_status(conf: Dict[str, Any], chore_id: str, status: str, exit_code: Optional[int] = None):

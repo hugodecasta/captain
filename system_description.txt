@@ -207,3 +207,8 @@ The tactic is changed, no alias lets use sbin and local bin and all to create
 easly reachable commands
 The general (for all user) captain and sailor command will be stored as
 bash commands "captain" and "sailor" that will run the captain.py and sailor.py
+
+----------------- V1.6.0
+
+Allow the processes to write their stdout and stderr in a file
+in the --chore command let add a out parameter out=<path>

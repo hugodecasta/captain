@@ -599,6 +599,7 @@ def try_assign_pending():
                     "script": chore.get("script"),
                     "ressources": chore.get("ressources", {}),
                     "owner": chore.get("owner"),
+                    **({"out": chore.get("out")} if chore.get("out") else {}),
                 }, timeout=5)
                 resp.raise_for_status()
                 logger.info(f"Sailor {sailor_name} accepted chore {chore_id}")
@@ -827,6 +828,7 @@ def user_chore(payload: Dict[str, Any]):
     ressources = payload.get("ressources", {})
     cpus = int(ressources.get("cpus", payload.get("cpus", 1)) or 1)
     gpus = int(ressources.get("gpus", payload.get("gpus", 0)) or 0)
+    out_file = payload.get("out")
 
     # enforce user chores_limit if defined
     users = load_users()
@@ -868,6 +870,7 @@ def user_chore(payload: Dict[str, Any]):
         "status": "pending",
         "start": now_ts(),
         "reason": "no available sailor",
+        **({"out": out_file} if out_file else {}),
     }
     chores = load_chores()
     chores[chore_id] = chore
@@ -1011,7 +1014,7 @@ def cli():
     parser = argparse.ArgumentParser(description="Captain server and CLI")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--serve", type=int, metavar="PORT", help="Run API server on PORT")
-    group.add_argument("--chore", nargs="+", metavar="key=value", help="Submit a chore: script= service= cpus= gpus=")
+    group.add_argument("--chore", nargs="+", metavar="key=value", help="Submit a chore: script= service= cpus= gpus= out=<file>")
     group.add_argument("--consult", action="store_true", help="Consult chores (use --all for all)")
     group.add_argument("--cancel", metavar="CHORE_ID", help="Cancel a chore by id")
     group.add_argument("--prereg", nargs=2, metavar=("NAME", "IP"), help="Preregister a sailor")
@@ -1069,6 +1072,8 @@ def cli():
             },
             "owner": os.getuid(),
         }
+        if kv.get("out"):
+            payload["out"] = kv.get("out")
         url = f"{base}/user_chore"
         try:
             resp = requests.post(url, json=payload, timeout=5)
