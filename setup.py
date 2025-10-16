@@ -28,8 +28,20 @@ def run(cmd):
 def ensure_venv():
     if not VENV_DIR.exists():
         run([sys.executable, "-m", "venv", str(VENV_DIR)])
-    run([str(VENV_DIR / "bin" / "python"), "-m", "pip", "install", "--upgrade", "pip"])
-    run([str(VENV_DIR / "bin" / "pip"), "install", "-r", str(REQ)])
+    py = str(VENV_DIR / "bin" / "python")
+    # Always invoke pip via the venv's Python to avoid broken shebang/relocation issues.
+    try:
+        run([py, "-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"])
+    except subprocess.CalledProcessError:
+        # Some systems create a venv without pip available; bootstrap with ensurepip then retry.
+        print("pip not available in venv yet; bootstrapping with ensurepip...")
+        run([py, "-m", "ensurepip", "--upgrade"])  # ensure pip exists in the venv
+        run([py, "-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"])
+
+    if REQ.exists():
+        run([py, "-m", "pip", "install", "-r", str(REQ)])
+    else:
+        print(f"Requirements file not found at {REQ}. Skipping dependency installation.")
 
 
 def ensure_aliases():
