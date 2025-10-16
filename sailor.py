@@ -16,6 +16,8 @@ import requests
 from fastapi import FastAPI, HTTPException
 import uvicorn
 import socket
+import pwd
+import shlex
 
 ROOT = Path(__file__).parent
 DATA_DIR = ROOT / "data" / "sailor"
@@ -122,6 +124,8 @@ def captain_request(payload: Dict[str, Any]):
     script = payload.get("script")
     ressources = payload.get("ressources", {})
     out_file = payload.get("out")
+    owner = payload.get("owner")
+    wd = payload.get("wd")
     if not chore_id or not script:
         raise HTTPException(400, "chore_id and script required")
     if chore_id in proc_by_chore:
@@ -134,27 +138,94 @@ def captain_request(payload: Dict[str, Any]):
     if gpus > 0:
         env["CUDA_VISIBLE_DEVICES"] = ",".join(str(i) for i in range(gpus))
 
-    # run script as current user; assume script is executable
+    # Resolve target user and working directory
     try:
+        uid = int(owner) if owner is not None else os.getuid()
+    except Exception:
+        raise HTTPException(400, "invalid owner uid")
+    try:
+        pwrec = pwd.getpwuid(uid)
+    except KeyError:
+        raise HTTPException(400, f"owner uid not found: {owner}")
+    user_home = pwrec.pw_dir
+    user_name = pwrec.pw_name
+    user_gid = pwrec.pw_gid
+
+    # prepare environment for the user
+    env["HOME"] = user_home
+    env["USER"] = user_name
+    env["LOGNAME"] = user_name
+
+    # Resolve working directory
+    def _resolve_for_user(path: str, base: str) -> str:
+        if not path:
+            return base
+        if path.startswith("~"):
+            # expand ~ relative to user's home
+            rest = path[1:]
+            if rest.startswith("/"):
+                return os.path.join(user_home, rest.lstrip("/"))
+            return os.path.join(user_home, rest)
+        if os.path.isabs(path):
+            return path
+        return os.path.join(base, path)
+
+    cwd_path = _resolve_for_user(wd, user_home) if wd else user_home
+    if not os.path.isdir(cwd_path):
+        raise HTTPException(400, f"working directory not found: {cwd_path}")
+
+    # Build command and output redirection (as the target user)
+    cmd: list[str]
+    stdout_target = None
+    stderr_target = None
+    if out_file:
+        out_resolved = _resolve_for_user(str(out_file), cwd_path)
+        # use a shell to create directory and redirect outputs after privilege drop
+        out_dir = os.path.dirname(out_resolved) or "."
+        redir = f"mkdir -p {shlex.quote(out_dir)}; exec >> {shlex.quote(out_resolved)} 2>&1; exec /bin/bash {shlex.quote(script)}"
+        cmd = ["/bin/bash", "-lc", redir]
+    else:
+        # discard outputs if no out file specified
+        cmd = ["/bin/bash", script]
         stdout_target = subprocess.DEVNULL
         stderr_target = subprocess.DEVNULL
-        out_fh = None
-        if out_file:
+
+    # Demote privileges to the target user for the process
+    def _demote():
+        try:
+            os.setgid(user_gid)
             try:
-                out_path = Path(str(out_file)).expanduser()
-                out_path.parent.mkdir(parents=True, exist_ok=True)
-                # open in append mode to accumulate output
-                out_fh = out_path.open("ab", buffering=0)
-                stdout_target = out_fh
-                stderr_target = out_fh
-            except Exception as e:
-                logger.warning(f"Failed to open out file {out_file}: {e}. Falling back to PIPE.")
-                out_fh = None
-        popen = psutil.Popen(["/bin/bash", script], env=env, stdout=stdout_target, stderr=stderr_target)
+                os.initgroups(user_name, user_gid)
+            except Exception:
+                pass
+            os.setuid(uid)
+            os.umask(0o022)
+        except Exception as e:
+            # If we cannot drop privileges, abort process start
+            raise e
+
+    # run script as target user; assume script is executable
+    try:
+        popen = psutil.Popen(
+            cmd,
+            env=env,
+            cwd=cwd_path,
+            preexec_fn=_demote,
+            stdout=stdout_target,
+            stderr=stderr_target,
+        )
         proc_by_chore[chore_id] = popen
-        running[chore_id] = {"chore_id": chore_id, "pid": popen.pid, "start": int(time.time()), "cancel_requested": False, **({"out": str(out_file)} if out_file else {})}
+        running[chore_id] = {
+            "chore_id": chore_id,
+            "pid": popen.pid,
+            "start": int(time.time()),
+            "cancel_requested": False,
+            **({"out": str(out_file)} if out_file else {}),
+            **({"wd": cwd_path} if cwd_path else {}),
+            "owner": uid,
+        }
         save_running(running)
-        threading.Thread(target=_watch_process, args=(chore_id, out_fh), daemon=True).start()
+        threading.Thread(target=_watch_process, args=(chore_id, None), daemon=True).start()
         return {"ok": True}
     except Exception as e:
         logger.error(f"Failed to start chore {chore_id}: {e}")
