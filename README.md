@@ -4,11 +4,11 @@ A minimal resource scheduler with a Captain (controller) and Sailors (workers).
 
 ## Setup
 
-1. Create a venv, install deps, and add shell aliases:
+1. Create a venv, install deps, and install system-wide CLI wrappers (no aliases):
 
-   python3 setup.py
+  python3 setup.py
 
-   This creates .captainenv and adds `captain` and `sailor` functions to your ~/.bashrc.
+  This creates .captainenv and installs `captain` and `sailor` executables in /usr/local/bin (or a fallback like ~/.local/bin if not writable). Use --prefix to choose a directory, or --no-venv to skip venv.
 
 ## Run
 

@@ -203,3 +203,7 @@ can setup the sailor
 ----------------- V1.5.1
 
 Maybe because of the new service system, the flag port is not set anymore
+The tactic is changed, no alias lets use sbin and local bin and all to create
+easly reachable commands
+The general (for all user) captain and sailor command will be stored as
+bash commands "captain" and "sailor" that will run the captain.py and sailor.py
