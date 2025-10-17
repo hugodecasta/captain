@@ -6,6 +6,7 @@ import os
 import sys
 import threading
 import time
+import tempfile
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Tuple
 
@@ -50,9 +51,41 @@ def _read_json(path: Path, default):
 
 
 def _write_json(path: Path, data):
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    with tmp.open("w") as f:
-        json.dump(data, f, indent=2, sort_keys=True)
+    # Ensure directory exists and write atomically with a unique temp file to avoid concurrent collisions
+    path.parent.mkdir(parents=True, exist_ok=True)
+    attempts = 2
+    last_err = None
+    for _ in range(attempts):
+        tmp_path: Optional[Path] = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                dir=str(path.parent),
+                prefix=path.name + ".",
+                suffix=".tmp",
+                delete=False,
+                encoding="utf-8",
+            ) as f:
+                tmp_path = Path(f.name)
+                json.dump(data, f, indent=2, sort_keys=True)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, path)
+            return
+        except FileNotFoundError as e:
+            # If the temp file disappeared due to a race, retry with a new temp name
+            last_err = e
+            continue
+        except Exception as e:
+            last_err = e
+            if tmp_path and tmp_path.exists():
+                try:
+                    tmp_path.unlink()
+                except Exception:
+                    pass
+            raise
+    if last_err:
+        raise last_err
     os.replace(tmp, path)
 
 # Data models (dicts as per spec)
