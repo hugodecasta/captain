@@ -681,9 +681,73 @@ def try_assign_pending():
         if chore.get("status") not in (None, "pending"):
             continue
         service = chore.get("service")
+        service = chore.get("service")
+        target = chore.get("target_sailor")
         need_cpus = int(chore.get("ressources", {}).get("cpus", 1) or 1)
         need_gpus = int(chore.get("ressources", {}).get("gpus", 0) or 0)
         candidates = eligible_sailors(crew, service)
+        # If a target sailor is requested, restrict to that one only and update reason if not available
+        if target:
+            ts = crew.get(target)
+            if not ts:
+                if chore.get("reason") != "requested sailor not found":
+                    chore["reason"] = "requested sailor not found"
+                    chores[chore.get("chore_id")] = chore
+                    save_chores(chores)
+                continue
+            status = _derive_status(ts)
+            if status == "down":
+                if chore.get("reason") != "requested sailor down":
+                    chore["reason"] = "requested sailor down"
+                    chores[chore.get("chore_id")] = chore
+                    save_chores(chores)
+                continue
+            total_cpus = int(ts.get("cpus", 0) or 0)
+            total_gpus = int(len(ts.get("gpus", []) or []))
+            used_cpus = int(ts.get("used_cpus", 0) or 0)
+            used_gpus = int(ts.get("used_gpus", 0) or 0)
+            free_cpus = max(total_cpus - used_cpus, 0)
+            free_gpus = max(total_gpus - used_gpus, 0)
+            if free_cpus < need_cpus or free_gpus < need_gpus:
+                if chore.get("reason") != "requested sailor lacks resources":
+                    chore["reason"] = "requested sailor lacks resources"
+                    chores[chore.get("chore_id")] = chore
+                    save_chores(chores)
+                continue
+            candidates = [ts]
+        # If a target sailor is requested, restrict to that one only and update reason if not available
+        if target:
+            ts = crew.get(target)
+            if not ts:
+                # not found, keep pending until prereg/register occurs
+                if chore.get("reason") != "requested sailor not found":
+                    chore["reason"] = "requested sailor not found"
+                    chores[chore.get("chore_id")] = chore
+                    save_chores(chores)
+                continue
+            # Check liveness
+            status = _derive_status(ts)
+            if status == "down":
+                if chore.get("reason") != "requested sailor down":
+                    chore["reason"] = "requested sailor down"
+                    chores[chore.get("chore_id")] = chore
+                    save_chores(chores)
+                continue
+            # Check free resources
+            total_cpus = int(ts.get("cpus", 0) or 0)
+            total_gpus = int(len(ts.get("gpus", []) or []))
+            used_cpus = int(ts.get("used_cpus", 0) or 0)
+            used_gpus = int(ts.get("used_gpus", 0) or 0)
+            free_cpus = max(total_cpus - used_cpus, 0)
+            free_gpus = max(total_gpus - used_gpus, 0)
+            if free_cpus < need_cpus or free_gpus < need_gpus:
+                if chore.get("reason") != "requested sailor lacks resources":
+                    chore["reason"] = "requested sailor lacks resources"
+                    chores[chore.get("chore_id")] = chore
+                    save_chores(chores)
+                continue
+            # Accept only the target as candidate
+            candidates = [ts]
         # filter by free resources
         best = None
         for s in candidates:
@@ -742,7 +806,7 @@ def try_assign_pending():
                 save_chores(chores)
         else:
             # no available sailor for this chore currently
-            if (chore.get("status") in (None, "pending")) and (chore.get("reason") != "no available sailor"):
+            if (chore.get("status") in (None, "pending")) and (not chore.get("reason")):
                 chore["status"] = "pending"
                 chore["reason"] = "no available sailor"
                 chores[chore.get("chore_id")] = chore
@@ -852,7 +916,8 @@ def sailor_register(payload: Dict[str, Any]):
     s = crew[name]
     s.update({
         "name": name,
-        "ip": s.get("ip", ip),
+        # Always take the reported IP from the registering sailor; prereg IP may be a placeholder
+        "ip": ip,
         "port": port,
         "cpus": int(payload.get("cpus", s.get("cpus", 0)) or 0),
         "gpus": payload.get("gpus", s.get("gpus", [])) or [],
@@ -955,6 +1020,7 @@ def user_chore(payload: Dict[str, Any]):
         raise HTTPException(400, "script required")
     owner = payload.get("owner") or os.getuid()
     service = payload.get("service")
+    target_sailor = payload.get("sailor")
     ressources = payload.get("ressources", {})
     cpus = int(ressources.get("cpus", payload.get("cpus", 1)) or 1)
     gpus = int(ressources.get("gpus", payload.get("gpus", 0)) or 0)
@@ -1001,6 +1067,7 @@ def user_chore(payload: Dict[str, Any]):
         "status": "pending",
         "start": now_ts(),
         "reason": "no available sailor",
+        **({"target_sailor": target_sailor} if target_sailor else {}),
         **({"out": out_file} if out_file else {}),
         **({"wd": wd} if wd else {}),
     }
@@ -1306,6 +1373,8 @@ def cli():
             },
             "owner": os.getuid(),
         }
+        if kv.get("sailor"):
+            payload["sailor"] = kv.get("sailor")
         if kv.get("out"):
             payload["out"] = kv.get("out")
         if kv.get("wd"):
