@@ -216,11 +216,70 @@ def captain_request(payload: Dict[str, Any]):
 
     # Environment for target user (preserve current env, but set HOME/USER appropriately)
     env = _build_env(pw_entry, True, uid, workdir)
-    cpus = int(ressources.get("cpus", 1) or 1)
-    gpus = int(ressources.get("gpus", 0) or 0)
-    env["OMP_NUM_THREADS"] = str(cpus)
-    if gpus > 0:
-        env["CUDA_VISIBLE_DEVICES"] = ",".join(str(i) for i in range(gpus))
+
+    # CPU constraints
+    cpu_total = os.cpu_count() or 1
+    try:
+        cpus_req = int(ressources.get("cpus", 1) or 1)
+    except Exception:
+        cpus_req = 1
+    n_cpus = max(1, min(int(cpus_req), cpu_total))
+    cpu_set = set(range(n_cpus))
+
+    # Threading environment to honor CPU budget
+    for v in (
+        "OMP_NUM_THREADS",
+        "OPENBLAS_NUM_THREADS",
+        "MKL_NUM_THREADS",
+        "NUMEXPR_NUM_THREADS",
+        "VECLIB_MAXIMUM_THREADS",
+    ):
+        env[v] = str(n_cpus)
+    env["MKL_DYNAMIC"] = "FALSE"
+    env["OMP_DYNAMIC"] = "FALSE"
+    # Help OpenMP keep threads within our affinity mask
+    # try:
+    #     if cpu_set == set(range(min(cpu_set), max(cpu_set) + 1)):
+    #         env["GOMP_CPU_AFFINITY"] = f"{min(cpu_set)}-{max(cpu_set)}"
+    #     else:
+    #         env["GOMP_CPU_AFFINITY"] = " ".join(str(i) for i in sorted(cpu_set))
+    # except Exception:
+    #     pass
+    env["TORCH_NUM_THREADS"] = str(n_cpus)
+    env["TORCH_NUM_INTEROP_THREADS"] = str(max(1, min(n_cpus, 8)))
+
+    # GPU constraints: support list of indices or integer count
+    gspec = ressources.get("gpus", 0)
+    gpu_list: Optional[List[int]] = None
+    if isinstance(gspec, list):
+        try:
+            gpu_list = [int(x) for x in gspec]
+        except Exception:
+            gpu_list = None
+    elif isinstance(gspec, str):
+        try:
+            parts = [p.strip() for p in gspec.split(",") if p.strip() != ""]
+            gpu_list = [int(p) for p in parts]
+        except Exception:
+            gpu_list = None
+    else:
+        # treat as count
+        try:
+            count = int(gspec or 0)
+            if count > 0:
+                gpu_list = list(range(count))
+            elif count == 0:
+                gpu_list = []  # explicitly hide GPUs
+        except Exception:
+            gpu_list = None
+
+    if gpu_list is not None:
+        gpu_str = ",".join(str(i) for i in gpu_list)
+        # Constrain visible GPUs across common env knobs
+        env["CUDA_VISIBLE_DEVICES"] = gpu_str
+        env["NVIDIA_VISIBLE_DEVICES"] = gpu_str
+        env["HIP_VISIBLE_DEVICES"] = gpu_str
+        env["ROCR_VISIBLE_DEVICES"] = gpu_str
 
     # Build command and stdout/stderr handling
     cmd: List[str]
@@ -242,6 +301,15 @@ def captain_request(payload: Dict[str, Any]):
 
     # preexec function to drop privileges and change working directory
     def _demote_and_setup():
+        # Apply CPU affinity as early as possible for the child process
+        try:
+            os.sched_setaffinity(0, cpu_set)
+            print('setting CPUS', cpu_set)
+        except Exception:
+            try:
+                os.write(2, b"Failed to set CPU affinity, continuing anyway.\n")
+            except Exception:
+                pass
         # If we're already the target user, avoid attempting privileged ops
         try:
             if os.geteuid() == uid:
