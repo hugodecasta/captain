@@ -9,15 +9,15 @@ import sys
 import threading
 import time
 from pathlib import Path
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 import psutil
 import requests
 from fastapi import FastAPI, HTTPException
 import uvicorn
 import socket
-import pwd
 import shlex
+import pwd
 
 ROOT = Path(__file__).parent
 DATA_DIR = ROOT / "data" / "sailor"
@@ -103,6 +103,58 @@ running: Dict[str, Dict[str, Any]] = {}
 proc_by_chore: Dict[str, psutil.Popen] = {}
 
 
+# --- Privilege drop helpers (inspired by old exec_sub.py) ---
+
+
+def _build_env(pw: Optional[pwd.struct_passwd], preserve: bool, uid: int, workdir: Optional[str]):
+    """
+    Build environment for target user. If no passwd entry is available, fall back to a numeric-based env.
+    """
+    fallback = {
+        "HOME": workdir or "/",
+        "LOGNAME": str(uid),
+        "USER": str(uid),
+        "SHELL": "/bin/sh",
+        "PATH": os.environ.get(
+            "PATH",
+            "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        ),
+        "LANG": os.environ.get("LANG", "C.UTF-8"),
+        "LC_ALL": os.environ.get("LC_ALL") or os.environ.get("LANG") or "C.UTF-8",
+    }
+
+    if pw is None:
+        if preserve:
+            env = dict(os.environ)
+            env.update(fallback)
+            return env
+        return fallback
+
+    if preserve:
+        env = dict(os.environ)
+        env.update(
+            {
+                "HOME": pw.pw_dir,
+                "LOGNAME": pw.pw_name,
+                "USER": pw.pw_name,
+                "SHELL": pw.pw_shell or "/bin/sh",
+            }
+        )
+        return env
+    return {
+        "HOME": pw.pw_dir,
+        "LOGNAME": pw.pw_name,
+        "USER": pw.pw_name,
+        "SHELL": pw.pw_shell or "/bin/sh",
+        "PATH": os.environ.get(
+            "PATH",
+            "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        ),
+        "LANG": os.environ.get("LANG", "C.UTF-8"),
+        "LC_ALL": os.environ.get("LC_ALL") or os.environ.get("LANG") or "C.UTF-8",
+    }
+
+
 def load_conf():
     return _read_json(CONF_FILE, {})
 
@@ -131,86 +183,129 @@ def captain_request(payload: Dict[str, Any]):
     if chore_id in proc_by_chore:
         return {"ok": True}
 
-    env = os.environ.copy()
+    # Resolve target user UID
+    try:
+        uid = int(owner) if owner is not None else os.getuid()
+    except Exception:
+        logger.error(f"invalid owner uid: {owner}")
+        raise HTTPException(400, "invalid owner uid")
+
+    # Ensure we can switch identity when necessary
+    euid = os.geteuid()
+    if uid != euid and euid != 0:
+        raise HTTPException(403, "sailor must run as root to switch uid")
+
+    # Try to look up passwd entry; proceed without it if missing
+    pw_entry = None
+    try:
+        pw_entry = pwd.getpwuid(uid)
+    except KeyError:
+        pw_entry = None
+
+    # Determine target GID
+    target_gid = pw_entry.pw_gid if pw_entry is not None else uid
+
+    # Resolve working directory
+    workdir = None
+    if wd:
+        workdir = wd if os.path.isabs(wd) else os.path.abspath(wd)
+        if not os.path.isdir(workdir):
+            raise HTTPException(400, f"working directory not found: {workdir}")
+    else:
+        workdir = pw_entry.pw_dir if pw_entry is not None else "/"
+
+    # Environment for target user (preserve current env, but set HOME/USER appropriately)
+    env = _build_env(pw_entry, True, uid, workdir)
     cpus = int(ressources.get("cpus", 1) or 1)
     gpus = int(ressources.get("gpus", 0) or 0)
     env["OMP_NUM_THREADS"] = str(cpus)
     if gpus > 0:
         env["CUDA_VISIBLE_DEVICES"] = ",".join(str(i) for i in range(gpus))
 
-    # Resolve target user and working directory
-    try:
-        uid = int(owner) if owner is not None else os.getuid()
-    except Exception:
-        raise HTTPException(400, "invalid owner uid")
-    try:
-        pwrec = pwd.getpwuid(uid)
-    except KeyError:
-        raise HTTPException(400, f"owner uid not found: {owner}")
-    user_home = pwrec.pw_dir
-    user_name = pwrec.pw_name
-    user_gid = pwrec.pw_gid
-
-    # prepare environment for the user
-    env["HOME"] = user_home
-    env["USER"] = user_name
-    env["LOGNAME"] = user_name
-
-    # Resolve working directory
-    def _resolve_for_user(path: str, base: str) -> str:
-        if not path:
-            return base
-        if path.startswith("~"):
-            # expand ~ relative to user's home
-            rest = path[1:]
-            if rest.startswith("/"):
-                return os.path.join(user_home, rest.lstrip("/"))
-            return os.path.join(user_home, rest)
-        if os.path.isabs(path):
-            return path
-        return os.path.join(base, path)
-
-    cwd_path = _resolve_for_user(wd, user_home) if wd else user_home
-    if not os.path.isdir(cwd_path):
-        raise HTTPException(400, f"working directory not found: {cwd_path}")
-
-    # Build command and output redirection (as the target user)
-    cmd: list[str]
+    # Build command and stdout/stderr handling
+    cmd: List[str]
     stdout_target = None
     stderr_target = None
     if out_file:
-        out_resolved = _resolve_for_user(str(out_file), cwd_path)
-        # use a shell to create directory and redirect outputs after privilege drop
-        out_dir = os.path.dirname(out_resolved) or "."
-        redir = f"mkdir -p {shlex.quote(out_dir)}; exec >> {shlex.quote(out_resolved)} 2>&1; exec /bin/bash {shlex.quote(script)}"
-        cmd = ["/bin/bash", "-lc", redir]
+        # Use a bash -lc wrapper to create the output directory and redirect to the output file
+        out_dir = os.path.dirname(out_file) or "."
+        inner = (
+            f"mkdir -p {shlex.quote(out_dir)}; "
+            f"exec >> {shlex.quote(out_file)} 2>&1; "
+            f"exec /bin/bash {shlex.quote(script)}"
+        )
+        cmd = ["/bin/bash", "-lc", inner]
     else:
-        # discard outputs if no out file specified
         cmd = ["/bin/bash", script]
         stdout_target = subprocess.DEVNULL
         stderr_target = subprocess.DEVNULL
 
-    # Demote privileges to the target user for the process
-    def _demote():
+    # preexec function to drop privileges and change working directory
+    def _demote_and_setup():
+        # If we're already the target user, avoid attempting privileged ops
         try:
-            os.setgid(user_gid)
+            if os.geteuid() == uid:
+                if workdir:
+                    try:
+                        os.chdir(workdir)
+                    except Exception as e:
+                        try:
+                            os.write(2, f"Failed to chdir to {workdir}: {e}\n".encode())
+                        except Exception:
+                            pass
+                        os._exit(154)
+                return
+        except Exception:
+            pass
+
+        # Supplementary groups
+        try:
+            if pw_entry is not None and target_gid is not None:
+                os.initgroups(pw_entry.pw_name, target_gid)
+            else:
+                os.setgroups([])
+        except Exception:
             try:
-                os.initgroups(user_name, user_gid)
+                os.setgroups([])
             except Exception:
                 pass
-            os.setuid(uid)
-            os.umask(0o022)
-        except Exception as e:
-            # If we cannot drop privileges, abort process start
-            raise e
 
-    # run script as target user; assume script is executable
+        # Primary GID
+        try:
+            if target_gid is not None:
+                if hasattr(os, "setresgid"):
+                    os.setresgid(target_gid, target_gid, target_gid)
+                else:
+                    os.setgid(target_gid)
+        except Exception:
+            # Best effort; continue to try setting UID
+            pass
+
+        # UID
+        if hasattr(os, "setresuid"):
+            os.setresuid(uid, uid, uid)
+        else:
+            os.setuid(uid)
+
+        # Umask
+        os.umask(0o022)
+
+        # CWD
+        try:
+            os.chdir(workdir or "/")
+        except Exception as e:
+            try:
+                os.write(2, f"Failed to chdir to {workdir}: {e}\n".encode())
+            except Exception:
+                pass
+            os._exit(154)
+
+    # run script as target uid; assume script is accessible (e.g., on shared storage)
     try:
         popen = psutil.Popen(
             cmd,
             env=env,
-            cwd=cwd_path,
-            preexec_fn=_demote,
+            preexec_fn=_demote_and_setup,
             stdout=stdout_target,
             stderr=stderr_target,
         )
@@ -221,8 +316,8 @@ def captain_request(payload: Dict[str, Any]):
             "start": int(time.time()),
             "cancel_requested": False,
             **({"out": str(out_file)} if out_file else {}),
-            **({"wd": cwd_path} if cwd_path else {}),
-            "owner": uid,
+            **({"wd": workdir} if workdir else {}),
+            "owner": int(uid),
         }
         save_running(running)
         threading.Thread(target=_watch_process, args=(chore_id, None), daemon=True).start()
