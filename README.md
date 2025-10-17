@@ -18,11 +18,9 @@ Notes:
 
 ### Developer/local setup
 
-Create a venv, install deps, and install CLI wrappers into a suitable bin dir (no aliases):
+Use the project directly or the system-wide installer above. If you prefer a local venv, create one and install requirements:
 
-  python3 setup.py
-
-This creates `.captainenv` at the project root and installs `captain` and `sailor` wrappers in `/usr/local/bin` (or a fallback like `~/.local/bin` if not writable). Use `--prefix` to choose a directory, or `--no-venv` to skip venv.
+  python3 -m venv .captainenv && . .captainenv/bin/activate && pip install -r requirements.txt
 
 ## Run
 
@@ -79,23 +77,21 @@ This allows running `captain --crew` from any directory after the server has bee
 
 ## Systemd services
 
-Create and enable systemd services (will prompt for ports and use sudo):
+Create and start a Sailor system service (requires sudo; runs as root so it can switch to chore owners):
 
-  # Captain service (defaults to port 8000)
-  python3 setup_service.py --captain
+  sudo sailor --create-service --port 8001
 
-  # Sailor service (runs first-time prompt if resources missing; defaults to port from resources.json or 8001)
-  python3 setup_service.py --sailor
+Notes:
+- If you installed via the one-line installer, the `sailor` CLI is in your PATH. In a dev checkout, you can also run:
 
-You can override ports and user:
+    sudo python3 sailor.py --create-service --port 8001
 
-  python3 setup_service.py --captain --port 9000 --user $(whoami)
-  python3 setup_service.py --sailor --port 9001 --user $(whoami)
+- The command will run Sailor's first-time prompt if needed, write `/etc/systemd/system/sailor-<name>.service`, reload systemd, enable, and start the service.
+- Replace `<name>` with your Sailor name from `data/sailor/resources.json` (set during first-run).
 
 Check logs:
 
-  sudo journalctl -u captain -f
-  sudo journalctl -u sailor -f
+  sudo journalctl -u sailor-<name>.service -f
 
 ## Data
 

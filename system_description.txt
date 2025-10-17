@@ -114,10 +114,7 @@ Parameters:
     - python sailor.py (opens the sailor for the first time with data prompt but does not open the server)
     - python sailor.py --serve <PORT> (launch the sailor)
 
-an alias to "captain" will redirect to the python3 captain.py file same for sailor
-a setup.py will setup the system, create a varenv, install requirements in it and create the alias
-The alias should also activate the varenv alias captain="source <path>/.captainenv/bin/activate; <path>/captain.py"
-setup.py --captain or --sailor that will create the source lines for alias and happend them in the current user bashrc
+an alias to "captain" and "sailor" may be provided by the installer script. Local development can use virtualenv manually.
 
 ----------------- V1.1.0
 
@@ -222,3 +219,7 @@ Alors il faut refactorer la boucle du captain pour vérifier les choses suivante
 A chaque pas de la boucle (entre autres):
  - bien mettre a jour l'etat du crew en fonction du retour que nous donne les sailors
  - vérifier les chore en attente et retanter de les attribuer
+
+ ----------------- V1.7.0
+
+ Created a service maker to make the sailor service
