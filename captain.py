@@ -7,6 +7,7 @@ import sys
 import threading
 import time
 import tempfile
+import subprocess
 from pathlib import Path
 from typing import Dict, Any, Optional, List, Tuple
 
@@ -18,6 +19,8 @@ import uvicorn
 from contextlib import asynccontextmanager
 import secrets
 import pwd
+import shlex
+import shutil
 try:
     import pam  # type: ignore
 except Exception:
@@ -86,7 +89,7 @@ def _write_json(path: Path, data):
             raise
     if last_err:
         raise last_err
-    os.replace(tmp, path)
+    # Should not reach here; fallthrough is covered by raise above
 
 # Data models (dicts as per spec)
 
@@ -1139,10 +1142,103 @@ def user_cancel(payload: Dict[str, Any]):
 # CLI
 
 
+def _create_systemd_service_captain(port: int):
+    """
+    Create a systemd unit for Captain and try to enable/start it.
+    Works in system (root) mode when possible; otherwise attempts user mode.
+    """
+    python = sys.executable or "/usr/bin/python3"
+    script = str(Path(__file__).resolve())
+
+    unit_name = "captain.service"
+
+    def render_unit(user_mode: bool) -> str:
+        lines = [
+            "[Unit]",
+            "Description=Captain scheduler API",
+            "After=network.target",
+            "",
+            "[Service]",
+            "Type=simple",
+            f"ExecStart={shlex.quote(python)} {shlex.quote(script)} --serve {port}",
+            "Restart=always",
+            "RestartSec=3",
+            "Environment=PYTHONUNBUFFERED=1",
+            f"WorkingDirectory={shlex.quote(str(Path(script).parent))}",
+        ]
+        if not user_mode:
+            # In system mode, run as root (default when User is omitted). Set explicitly for clarity.
+            lines.append("User=root")
+        lines += [
+            "",
+            "[Install]",
+            "WantedBy=default.target" if user_mode else "WantedBy=multi-user.target",
+            "",
+        ]
+        return "\n".join(lines)
+
+    def _write(path: Path, content: str):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.open("w") as f:
+            f.write(content)
+        return path
+
+    has_systemctl = bool(shutil.which("systemctl"))
+    has_systemd = os.path.isdir("/run/systemd/system")
+    is_root = (hasattr(os, "geteuid") and os.geteuid() == 0)
+
+    if is_root and has_systemctl and has_systemd:
+        unit_path = Path("/etc/systemd/system") / unit_name
+        unit_content = render_unit(user_mode=False)
+        _write(unit_path, unit_content)
+        print(f"Wrote system unit: {unit_path}")
+        # Try to enable and start
+        try:
+            subprocess.run(["systemctl", "daemon-reload"], check=True)
+            subprocess.run(["systemctl", "enable", unit_name], check=True)
+            subprocess.run(["systemctl", "restart", unit_name], check=True)
+            print(f"Service enabled and started: {unit_name}")
+        except Exception as e:
+            print(f"Created unit, but failed to enable/start automatically: {e}")
+            print(f"You can run: sudo systemctl daemon-reload && sudo systemctl enable {unit_name} && sudo systemctl start {unit_name}")
+        return
+
+    # Fallback: user mode (no root or no system systemd)
+    if has_systemctl and has_systemd:
+        unit_path = Path.home() / ".config" / "systemd" / "user" / unit_name
+        unit_content = render_unit(user_mode=True)
+        _write(unit_path, unit_content)
+        print(f"Wrote user unit: {unit_path}")
+        # Try to enable and start in --user scope
+        try:
+            subprocess.run(["systemctl", "--user", "daemon-reload"], check=True)
+            subprocess.run(["systemctl", "--user", "enable", unit_name], check=True)
+            subprocess.run(["systemctl", "--user", "restart", unit_name], check=True)
+            print(f"User service enabled and started: {unit_name}")
+            print("Note: ensure lingering is enabled for your user if you want it active without login: sudo loginctl enable-linger $USER")
+        except Exception as e:
+            print(f"Created user unit, but failed to enable/start automatically: {e}")
+            print(f"You can run: systemctl --user daemon-reload && systemctl --user enable {unit_name} && systemctl --user start {unit_name}")
+        return
+
+    # Last fallback: write unit file next to script and show instructions
+    unit_path = Path(script).parent / unit_name
+    unit_content = render_unit(user_mode=not is_root)
+    _write(unit_path, unit_content)
+    print("Systemd not detected or systemctl unavailable.")
+    print(f"Wrote unit file locally: {unit_path}")
+    print("If your system uses systemd, move it to /etc/systemd/system (as root) then run:\n  systemctl daemon-reload && systemctl enable " + unit_name + " && systemctl start " + unit_name)
+
+
 def cli():
     parser = argparse.ArgumentParser(description="Captain server and CLI")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--serve", type=int, metavar="PORT", help="Run API server on PORT")
+    group.add_argument(
+        "--create-service",
+        action="store_true",
+        help="Create a systemd service for Captain (and attempt to enable/start it)",
+    )
     group.add_argument("--chore", nargs="+", metavar="key=value", help="Submit a chore: script= service= cpus= gpus= out=<file> wd=<dir>")
     group.add_argument("--consult", action="store_true", help="Consult chores (use --all for all)")
     group.add_argument("--cancel", metavar="CHORE_ID", help="Cancel a chore by id")
@@ -1169,6 +1265,15 @@ def cli():
     CLI_PORT_OVERRIDE = args.port
 
     json_last = ("--json" in sys.argv and sys.argv[-1] == "--json" and getattr(args, "json", False))
+
+    # Handle service creation request early and exit afterward
+    if getattr(args, "create_service", False):
+        if args.port is None:
+            print("Error: --port is required when using --create-service.")
+            print("Example: sudo python3 captain.py --create-service --port 8000")
+            sys.exit(2)
+        _create_systemd_service_captain(int(args.port))
+        return
 
     if args.serve is not None:
         port = args.serve
