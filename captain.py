@@ -90,6 +90,7 @@ cleanup_stop_event: Optional[threading.Event] = None
 cleanup_thread: Optional[threading.Thread] = None
 CAPTAIN_CLEANUP_TTL = int(os.getenv("CAPTAIN_CLEANUP_TTL", "120"))  # seconds
 CAPTAIN_CANCEL_REQUESTED_TTL = int(os.getenv("CAPTAIN_CANCEL_REQUESTED_TTL", "300"))  # seconds
+CAPTAIN_ASSIGN_GRACE = int(os.getenv("CAPTAIN_ASSIGN_GRACE", "10"))  # seconds to wait after assignment before rollback if not started
 
 
 def _cleanup_loop(stop_event: threading.Event):
@@ -101,6 +102,88 @@ def _cleanup_loop(stop_event: threading.Event):
             users = load_users()
             changed = False
             now = now_ts()
+            # A) Reconciliation with sailors: poll status to know running chores per sailor
+            running_by_sailor: Dict[str, set] = {}
+            for sname, s in list(crew.items()):
+                ip = s.get("ip")
+                port = int(s.get("port", 8001) or 8001)
+                last_seen = int(s.get("last_seen", 0) or 0)
+                # Only poll recently awake sailors
+                if not ip or (now - last_seen) > 10:
+                    continue
+                try:
+                    url = f"http://{ip}:{port}/status"
+                    r = requests.get(url, timeout=1.5)
+                    data = r.json() if r.ok else {}
+                    if isinstance(data, dict) and data.get("ok"):
+                        running_ids = set(data.get("running") or [])
+                        running_by_sailor[sname] = running_ids
+                except Exception:
+                    # ignore polling errors, heartbeat will mark down separately
+                    pass
+
+            # B) Recompute used resources and fix stale busy flags from authoritative chores store
+            #    Count resources for active chores (assigned/running/cancel_requested) per sailor
+            usage_cpus: Dict[str, int] = {name: 0 for name in crew.keys()}
+            usage_gpus: Dict[str, int] = {name: 0 for name in crew.keys()}
+            for cid, chore in chores.items():
+                st = str(chore.get("status", "")).lower()
+                if st not in ("assigned", "running", "cancel_requested"):
+                    continue
+                sname = chore.get("sailor")
+                if not sname or sname not in crew:
+                    continue
+                need_c = int(chore.get("ressources", {}).get("cpus", 1) or 1)
+                need_g = int(chore.get("ressources", {}).get("gpus", 0) or 0)
+                usage_cpus[sname] = usage_cpus.get(sname, 0) + max(0, need_c)
+                usage_gpus[sname] = usage_gpus.get(sname, 0) + max(0, need_g)
+
+            for sname, s in crew.items():
+                prev_uc, prev_ug = int(s.get("used_cpus", 0) or 0), int(s.get("used_gpus", 0) or 0)
+                new_uc, new_ug = usage_cpus.get(sname, 0), usage_gpus.get(sname, 0)
+                if prev_uc != new_uc or prev_ug != new_ug:
+                    s["used_cpus"], s["used_gpus"] = new_uc, new_ug
+                    changed = True
+                # derive status from last_seen and usage
+                derived = _derive_status(s)
+                if s.get("status") != derived:
+                    s["status"] = derived
+                    changed = True
+                crew[sname] = s
+
+            # C) Rollback stale assignments that never started
+            for cid, chore in list(chores.items()):
+                st = str(chore.get("status", "")).lower()
+                if st != "assigned":
+                    continue
+                sname = chore.get("sailor")
+                if not sname or sname not in crew:
+                    continue
+                assigned_at = int(chore.get("assigned_at") or 0)
+                # If grace expired and sailor is responsive and not running this chore, rollback to pending
+                if assigned_at and (now - assigned_at) > CAPTAIN_ASSIGN_GRACE:
+                    running_ids = running_by_sailor.get(sname, set())
+                    if cid not in running_ids:
+                        need_c = int(chore.get("ressources", {}).get("cpus", 1) or 1)
+                        need_g = int(chore.get("ressources", {}).get("gpus", 0) or 0)
+                        # de-assign chore
+                        chore["sailor"] = None
+                        chore["status"] = "pending"
+                        chore["reason"] = "sailor did not start"
+                        chores[cid] = chore
+                        # immediately free resources on that sailor
+                        s = crew.get(sname)
+                        if s:
+                            s["used_cpus"] = max(0, int(s.get("used_cpus", 0) or 0) - need_c)
+                            s["used_gpus"] = max(0, int(s.get("used_gpus", 0) or 0) - need_g)
+                            s["status"] = "idle" if (s.get("used_cpus", 0) == 0 and s.get("used_gpus", 0) == 0) else "busy"
+                            crew[sname] = s
+                        save_crew(crew)
+                        changed = True
+
+            if changed:
+                save_crew(crew)
+                save_chores(chores)
             # 1) Enforce user time_limit across active chores (assigned/running)
             # Build per-owner active chore durations and cancel newest beyond budget
             # Only consider chores not in terminal status
@@ -231,6 +314,11 @@ def _cleanup_loop(stop_event: threading.Event):
                         changed = True
             if changed:
                 save_chores(chores)
+            # D) Regardless of other changes, try to assign pending chores regularly
+            try:
+                try_assign_pending()
+            except Exception as e:
+                logger.error(f"try_assign_pending failed in cleanup: {e}")
         except Exception as e:
             logger.error(f"cleanup loop error: {e}")
         # sleep with stop awareness
@@ -761,6 +849,11 @@ def sailor_awake(payload: Dict[str, Any]):
     s["status"] = "full" if (s.get("used_cpus", 0) >= s.get("cpus", 0)) else ("busy" if s.get("used_cpus", 0) > 0 else "idle")
     crew[name] = s
     save_crew(crew)
+    # opportunistic attempt to assign any pending chores now that this sailor is awake
+    try:
+        try_assign_pending()
+    except Exception as e:
+        logger.error(f"try_assign_pending on awake failed: {e}")
     return {"ok": True}
 
 

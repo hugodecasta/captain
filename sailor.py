@@ -166,6 +166,23 @@ def load_running():
 def save_running(data):
     _write_json(RUN_FILE, data)
 
+# Lightweight status endpoint for captain reconciliation
+
+
+@app.get("/status")
+def status():
+    try:
+        current = list(running.keys())
+        # Fallback to persisted file if in-memory empty (e.g., after restart)
+        if not current:
+            persisted = load_running()
+            current = list((persisted or {}).keys())
+        pids = {cid: (proc_by_chore[cid].pid if cid in proc_by_chore else (running.get(cid) or {}).get("pid")) for cid in current}
+        return {"ok": True, "running": current, "pids": pids}
+    except Exception as e:
+        logger.error(f"status endpoint failed: {e}")
+        return {"ok": False, "running": [], "pids": {}}
+
 # Endpoint: captain_request
 
 

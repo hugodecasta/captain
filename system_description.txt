@@ -212,3 +212,13 @@ bash commands "captain" and "sailor" that will run the captain.py and sailor.py
 
 Allow the processes to write their stdout and stderr in a file
 in the --chore command let add a out parameter out=<path>
+
+----------------- V1.6.1
+
+parfois j'ai un sailor qui apparait busy alors que rien ne tourne dessus.
+Aussi parfois aucun sailor n'est connecté, un user demande un chore, la chore passe
+en pending "no sailoir ..." et quand le sailor se connecte, rien ne se passe.
+Alors il faut refactorer la boucle du captain pour vérifier les choses suivante:
+A chaque pas de la boucle (entre autres):
+ - bien mettre a jour l'etat du crew en fonction du retour que nous donne les sailors
+ - vérifier les chore en attente et retanter de les attribuer
