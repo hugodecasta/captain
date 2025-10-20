@@ -132,7 +132,7 @@ if __name__ == "__main__":
         if len(chores) == 0:
             print("No chores found")
         else:
-            headers = ["ID", "Owner", "RSailor", "RService", "CPUs", "GPUs", "Working Directory", "Script", "Output File", "Status", "Sailor", "Infos"]
+            headers = ["ID", "Owner", "RSlr", "RSrv", "CPUs", "GPUs", "WD", "SC", "Out", "Status", "Sailor", "Infos"]
             rows = [
                 create_chore_row(chore, is_small)
                 for chore in chores
