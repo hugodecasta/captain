@@ -8,6 +8,7 @@ from boat_chest import CHORE_STATUS_PENDING, CHORE_STATUS_RUNNING, CHORE_STATUS_
 import os
 import json
 import sys
+from boat_chest import requires_root
 
 
 def log(msg: str):
@@ -152,7 +153,6 @@ if __name__ == "__main__":
 
     # region .... chore
     elif args.mode == 'chore':
-
         if not args.working_directory or not args.script:
             parser.error("the following arguments are required for 'chore' mode: -wd/--working-directory, -sc/--script")
         if not args.rsailor and not args.rservice:
@@ -172,6 +172,7 @@ if __name__ == "__main__":
 
     # region .... pre register sailor
     elif args.mode == 'prereg':
+        requires_root()
         if not args.name:
             parser.error("the following arguments are required for 'prereg' mode: -n/--name")
         sailor_name = args.name
@@ -194,6 +195,7 @@ if __name__ == "__main__":
 
     # region .... remove sailor
     elif args.mode == 'rmsailor':
+        requires_root()
         if not args.name:
             parser.error("the following arguments are required for 'rmsailor' mode: -n/--name")
         sailor_name = args.name

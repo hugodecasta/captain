@@ -185,6 +185,12 @@ def create_service(name, description, command):
     os.system(f"systemctl enable {name}.service")
     os.system(f"systemctl start {name}.service")
 
+
+def requires_root():
+    if os.geteuid() != 0:
+        print("This operation requires root privileges. Please run as root.")
+        exit(1)
+
 # region -------------------------------------------------------- CHORES
 # region --------------------------------------------------------
 # region --------------------------------------------------------

@@ -5,6 +5,7 @@ from boat_chest import log_message
 from boat_chest import CHORE_STATUS_PENDING, CHORE_STATUS_ASSIGNED, CHORE_STATUS_RUNNING, CHORE_STATUS_COMPLETED, CHORE_STATUS_FAILED
 from boat_chest import create_service
 from boat_chest import SAILOR_STATUS_DOWN
+from boat_chest import requires_root
 import time
 
 import random
@@ -117,6 +118,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     if args.create_service:
+        requires_root()
         create_service_lieutenant()
         exit(0)
 

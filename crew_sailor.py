@@ -5,7 +5,7 @@ from boat_chest import log_message
 from boat_chest import get_version
 from boat_chest import CHORE_STATUS_PENDING, CHORE_STATUS_ASSIGNED, CHORE_STATUS_RUNNING, CHORE_STATUS_CANCEL_REQUESTED
 from boat_chest import DATA_DIR
-
+from boat_chest import requires_root
 import subprocess
 import psutil
 import threading
@@ -361,16 +361,19 @@ if __name__ == "__main__":
 
     # region .... setup
     if args.setup:
+        requires_root()
         ret_info = setup_sailor(args.setup, args.gpus)
         log(f"Setup trial results in: {ret_info}")
         print(ret_info)
 
     # region .... setup
     if args.create_service:
+        requires_root()
         create_service_sailor()
         exit(0)
 
     # region .... run
     if args.run:
+        requires_root()
         log("Starting sailor loop")
         loop()
