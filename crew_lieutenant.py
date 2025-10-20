@@ -125,7 +125,7 @@ def start_front_server(port):
     # serve all front file from ./front
     from flask import send_from_directory
 
-    front_dir = os.path.join(os.getcwd(), 'front')
+    front_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'front')
 
     @app.route('/<path:path>')
     def send_front(path):
