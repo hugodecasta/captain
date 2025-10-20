@@ -73,7 +73,7 @@ def archive_chores():
     current_time = time.time()
     for chore in chores:
         end = chore.get("End")
-        if chore["Status"] == CHORE_STATUS_CANCEL_REQUESTED:
+        if get_chore_status(chore) == CHORE_STATUS_CANCEL_REQUESTED:
             end = chore["Start"]
         if end is None or end == -2:
             continue
