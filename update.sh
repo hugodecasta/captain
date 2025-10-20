@@ -99,3 +99,6 @@ else
 fi
 
 echo "Update complete. Location: $INSTALL_DIR"
+
+sudo service sailor restart
+sudo service lieutenant restart
