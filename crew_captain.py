@@ -105,7 +105,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    owner = 1003  # os.getuid()
+    owner = os.getuid()
 
     # region .... consult
     if args.mode == 'consult':
