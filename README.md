@@ -62,3 +62,23 @@ Or make it work on its own
 sudo sailor --create-service
 sudo service sailor status
 ```
+
+## Usage
+
+### User
+
+```bash
+captain --crew
+```
+
+```bash
+captain --chore [-slr <sailor name>] [-srv <service name>] -wd <working dir> -sc <sh script relative to wd> --cpus <cpu count requested> --gpus <gpu count requested> --out <out file relative to wd>
+```
+
+```bash
+captain --consult [--small]
+```
+
+```bash
+captain --cancel -cid <chore ID>
+```

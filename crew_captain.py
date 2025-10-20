@@ -50,13 +50,15 @@ def captain_cancel_chore(chore_id: int):
 # region --------------------------------------------------------
 
 
-def create_chore_row(chore):
+def create_chore_row(chore, is_small):
     status = get_chore_status(chore)
     config = json.loads(chore["configuration"])
     cpus, gpus = get_chore_requested_ressources(chore)
     wd = config.get('working_directory', 'N/A')
     script = config.get('script', 'N/A')
     out = config.get('output_file', 'N/A')
+    if is_small:
+        wd = wd[:10] + '...'
     return [chore["ID"], chore["owner"], chore["RSailor"], chore["RService"], cpus, gpus, wd, script, out, status, chore["Sailor"], chore["Infos"]]
 
 
@@ -103,6 +105,8 @@ if __name__ == "__main__":
 
     parser.add_argument('-cid', type=int, required=False, help='Chore ID to cancel')
 
+    parser.add_argument('--small', action='store_true', required=False, help='Small display')
+
     args = parser.parse_args()
 
     owner = os.getuid()
@@ -110,12 +114,13 @@ if __name__ == "__main__":
     # region .... consult
     if args.mode == 'consult':
         chores = consult(owner)
+        is_small = args.small
         if len(chores) == 0:
             print("No chores found")
         else:
             headers = ["ID", "Owner", "RSailor", "RService", "CPUs", "GPUs", "Working Directory", "Script", "Output File", "Status", "Sailor", "Infos"]
             rows = [
-                create_chore_row(chore)
+                create_chore_row(chore, is_small)
                 for chore in chores
             ]
             print_table(headers, rows)
