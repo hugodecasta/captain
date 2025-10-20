@@ -6,6 +6,12 @@ A minimal resource scheduler with a Captain (controller) and Sailors (workers).
 
 ### Common installation
 
+Clone the repository
+```bash
+git clone https://github.com/hugodecasta/captain.git
+cd captain
+```
+
 Install the system
 ```bash
 sudo ./install.sh
@@ -62,6 +68,16 @@ Or make it work on its own
 sudo sailor --create-service
 sudo service sailor status
 ```
+
+### Updates
+
+In order to pull all updates, use the update command
+```bash
+cd captain
+./update.sh
+```
+
+Don't forget to restart all service related to the boat(`sailor`, `lieutenant`)
 
 ## Usage
 
