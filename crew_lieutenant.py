@@ -8,6 +8,7 @@ from boat_chest import SAILOR_STATUS_DOWN
 from boat_chest import requires_root
 import time
 
+import os
 import pwd
 import random
 
@@ -124,14 +125,16 @@ def start_front_server(port):
     # serve all front file from ./front
     from flask import send_from_directory
 
+    front_dir = os.path.join(os.getcwd(), 'front')
+
     @app.route('/<path:path>')
     def send_front(path):
-        return send_from_directory('front', path)
+        return send_from_directory(front_dir, path)
 
-    # serve index.html from ./front
+    # serve index.html from current working dir ./front
     @app.route('/')
     def send_index():
-        return send_from_directory('front', 'index.html')
+        return send_from_directory(front_dir, 'index.html')
 
     # crew service
     @app.route('/api/crew/', methods=['GET'])
@@ -147,8 +150,8 @@ def start_front_server(port):
         for chore in chores:
             status = get_chore_status(chore)
             chore["Status"] = status
-            if chore["Owner"] is not None:
-                chore["Owner"] = pwd.getpwuid(chore["Owner"]).pw_name
+            if chore["owner"] is not None:
+                chore["owner"] = pwd.getpwuid(chore["owner"]).pw_name
         return jsonify(chores)
 
     app.run(host='0.0.0.0', port=port)
