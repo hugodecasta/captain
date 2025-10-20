@@ -4,7 +4,7 @@ from boat_chest import get_version
 from boat_chest import print_table
 from boat_chest import log_message
 from boat_chest import pre_register_sailor, get_sailors, remove_sailor
-from boat_chest import CHORE_STATUS_PENDING, CHORE_STATUS_RUNNING, CHORE_STATUS_COMPLETED, CHORE_STATUS_FAILED, CHORE_STATUS_CANCEL_REQUESTED
+from boat_chest import CHORE_STATUS_PENDING, CHORE_STATUS_RUNNING, CHORE_STATUS_COMPLETED, CHORE_STATUS_FAILED, CHORE_STATUS_CANCEL_REQUESTED, CHORE_STATUS_CANCELED, CHORE_STATUS_ASSIGNED
 import os
 import json
 import sys
@@ -65,10 +65,14 @@ def create_chore_row(chore, is_small):
             status = "P"
         elif status == CHORE_STATUS_RUNNING:
             status = "R"
+        elif status == CHORE_STATUS_CANCELED:
+            status = "Cld"
         elif status == CHORE_STATUS_COMPLETED:
-            status = "C"
+            status = "done"
         elif status == CHORE_STATUS_FAILED:
             status = "F"
+        elif status == CHORE_STATUS_ASSIGNED:
+            status = "A"
         return [chore["ID"], cpus, gpus, script, status, chore["Infos"]]
     return [chore["ID"], chore["owner"], chore["RSailor"], chore["RService"], cpus, gpus, wd, script, out, status, chore["Sailor"], chore["Infos"]]
 

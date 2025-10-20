@@ -7,6 +7,8 @@ from boat_chest import create_service
 from boat_chest import SAILOR_STATUS_DOWN
 import time
 
+import random
+
 
 def log(message: str):
     log_message("lieutenant", message)
@@ -37,6 +39,8 @@ def assign_chore(chore, sailors):
 
     candidates = [c for c in candidates if c is not None and c['CPUS'] is not None]
     candidates = [c for c in candidates if c["Status"] != SAILOR_STATUS_DOWN]
+
+    random.shuffle(candidates)
 
     for candidate in candidates:
         sailor_name = candidate["Name"]
