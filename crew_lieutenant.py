@@ -73,7 +73,9 @@ def archive_chores():
     current_time = time.time()
     for chore in chores:
         end = chore.get("End")
-        if (end is None and chore["Status"] != CHORE_STATUS_CANCEL_REQUESTED) or end == -2:
+        if chore["Status"] == CHORE_STATUS_CANCEL_REQUESTED:
+            end = chore["Start"]
+        if end is None or end == -2:
             continue
         if current_time - end > 60 * 2:  # 2 minutes
             chore_id = chore["ID"]

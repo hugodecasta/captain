@@ -300,7 +300,7 @@ def add_chore(owner: str, rsailor: str, rservice: str, configuration: str):
 def cancel_chore(chore_id: int):
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("UPDATE Chores SET End = ? WHERE ID = ?", (-2, chore_id))
+    cursor.execute("UPDATE Chores SET Start = ?, End = ? WHERE ID = ?", (time.time(), -2, chore_id))
     conn.commit()
     conn.close()
 
