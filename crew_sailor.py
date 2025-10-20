@@ -1,5 +1,5 @@
 from boat_chest import get_chores_by_sailor_name, get_chore_requested_ressources, set_chore_pid
-from boat_chest import set_sailor_data, get_sailor_by_name, set_sailor_use, set_chore_end
+from boat_chest import set_sailor_data, get_sailor_by_name, set_sailor_use, set_chore_end, get_chore_by_id
 from boat_chest import get_chore_requested_ressources, assign_chore_sailor, get_chore_status, set_chore_infos
 from boat_chest import log_message
 from boat_chest import get_version
@@ -100,14 +100,19 @@ def set_chore_canceled(chore_id: int):
 
 # region .... process cache
 connected_processes: dict[int, subprocess.Popen] = {}
+total_used_cpus = 0
 
 
 # region .... watch process
-def watch_process(chore_id: int, pid: int):
+def watch_process(chore_id: int, pid: int, chore):
     print('watching', pid)
     process = connected_processes.get(pid)
+    global total_used_cpus
+    rcpus, _ = get_chore_requested_ressources(chore)
+    total_used_cpus += rcpus
     try:
         exit_code = process.wait()
+        total_used_cpus -= rcpus
         if exit_code == 0:
             set_chore_completed(chore_id, pid=pid)
             set_chore_infos(chore_id, infos="Completed successfully")
@@ -124,7 +129,8 @@ def watch_process(chore_id: int, pid: int):
 # region .... attach process
 
 
-def attach_process(chore_id: int, pid: int):
+def attach_process(chore_id: int, pid: int, chore=None):
+    global total_used_cpus
     try:
         proc = psutil.Process(pid)
         if proc is None:
@@ -132,7 +138,9 @@ def attach_process(chore_id: int, pid: int):
             log(f"Failed to attach to process {pid} for chore {chore_id}")
             return
         connected_processes[pid] = proc
-        watch_thread = threading.Thread(target=watch_process, args=(chore_id, pid,))
+        if chore is not None:
+            chore = get_chore_by_id(chore_id)
+        watch_thread = threading.Thread(target=watch_process, args=(chore_id, pid, chore,))
         watch_thread.start()
     except Exception:
         set_chore_failed(chore_id)
@@ -147,7 +155,7 @@ def recall_processes():
     running_chores = [c for c in all_chores if get_chore_status(c) == CHORE_STATUS_RUNNING]
     for chore in running_chores:
         chore_pid = int(chore.get("PID"))
-        attach_process(chore["ID"], chore_pid)
+        attach_process(chore["ID"], chore_pid, chore)
 
 
 # region .... create process
@@ -194,7 +202,8 @@ def create_process(chore_id: int, script: str, working_directory: str, output_fi
 
     def _demote_and_setup():
         try:
-            cpu_set = set(range(cpus))
+            start_cpu = total_used_cpus
+            cpu_set = set(range(start_cpu, start_cpu + cpus))
             os.sched_setaffinity(0, cpu_set)
             os.chdir(working_directory)
             os.setgroups([])
