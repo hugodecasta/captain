@@ -15,6 +15,9 @@ SRC_DIR="$(cd "$(dirname "$0")" && pwd)"
 INSTALL_DIR="/opt/captain"
 VENV_DIR="$INSTALL_DIR/.captainenv"
 UPDATE_DEPS=1
+# Frontend paths
+FRONT_SRC="$SRC_DIR/front"
+FRONT_DEST="$INSTALL_DIR/front"
 
 for arg in "$@"; do
   case "$arg" in
@@ -75,6 +78,22 @@ else
 fi
 
 echo "[2/3] Sync complete."
+
+# 2b) Fully replace the front directory (remove and copy)
+if [ -d "$FRONT_SRC" ]; then
+  echo "[2b/3] Replacing $FRONT_DEST from $FRONT_SRC"
+  if [ "${EUID:-$(id -u)}" -ne 0 ]; then
+    sudo rm -rf "$FRONT_DEST"
+    sudo mkdir -p "$FRONT_DEST"
+    sudo rsync -a "$FRONT_SRC"/ "$FRONT_DEST"/
+  else
+    rm -rf "$FRONT_DEST"
+    mkdir -p "$FRONT_DEST"
+    rsync -a "$FRONT_SRC"/ "$FRONT_DEST"/
+  fi
+else
+  echo "No front directory found at $FRONT_SRC (skipping front sync)"
+fi
 
 # 3) Optionally update deps inside the existing virtualenv
 if [ "$UPDATE_DEPS" = "1" ]; then

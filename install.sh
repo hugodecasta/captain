@@ -58,6 +58,25 @@ copy_tree() {
 # 1) Copy sources
 copy_tree "$SRC_DIR" "$INSTALL_DIR"
 
+# 1b) Copy frontend (if present)
+# FRONT_SRC_DIR can be set to override auto-detection
+FRONT_SRC_DIR="${FRONT_SRC_DIR:-}"
+if [ -z "$FRONT_SRC_DIR" ]; then
+  for cand in "$SRC_DIR/front" "$SRC_DIR/../front"; do
+    if [ -d "$cand" ]; then
+      FRONT_SRC_DIR="$cand"
+      break
+    fi
+  done
+fi
+
+if [ -n "${FRONT_SRC_DIR:-}" ] && [ -d "$FRONT_SRC_DIR" ]; then
+  echo "Installing frontend from $FRONT_SRC_DIR to $INSTALL_DIR/front"
+  copy_tree "$FRONT_SRC_DIR" "$INSTALL_DIR/front"
+else
+  echo "No frontend directory found; skipping frontend install"
+fi
+
 # 2) Create/upgrade venv and install deps
 PY3="$(command -v python3)"
 if [ ! -d "$VENV_DIR" ]; then
