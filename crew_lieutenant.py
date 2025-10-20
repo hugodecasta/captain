@@ -2,7 +2,7 @@ from boat_chest import get_chores, get_sailors
 from boat_chest import get_sailors_by_service, get_sailor_available_cpus, get_sailor_available_gpus, get_sailor_by_name
 from boat_chest import get_chore_requested_ressources, assign_chore_sailor, get_chore_status, set_chore_infos, archive_chore
 from boat_chest import log_message
-from boat_chest import CHORE_STATUS_PENDING, CHORE_STATUS_ASSIGNED, CHORE_STATUS_RUNNING, CHORE_STATUS_COMPLETED, CHORE_STATUS_FAILED
+from boat_chest import CHORE_STATUS_PENDING, CHORE_STATUS_CANCEL_REQUESTED, CHORE_STATUS_ASSIGNED, CHORE_STATUS_RUNNING, CHORE_STATUS_COMPLETED, CHORE_STATUS_FAILED
 from boat_chest import create_service
 from boat_chest import SAILOR_STATUS_DOWN
 from boat_chest import requires_root
@@ -73,7 +73,7 @@ def archive_chores():
     current_time = time.time()
     for chore in chores:
         end = chore.get("End")
-        if end is None or end == -2:
+        if (end is None and chore["Status"] != CHORE_STATUS_CANCEL_REQUESTED) or end == -2:
             continue
         if current_time - end > 60 * 2:  # 2 minutes
             chore_id = chore["ID"]
