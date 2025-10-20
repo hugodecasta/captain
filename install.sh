@@ -99,21 +99,23 @@ EOF
   echo "Installed wrapper: $wrapper"
 }
 
-install_wrapper captain captain.py
-install_wrapper sailor sailor.py
+install_wrapper captain crew_captain.py
+install_wrapper lieutenant crew_lieutenant.py
+install_wrapper sailor crew_sailor.py
 
 # 4) Ensure runtime data directories exist and are writable
-mkdir -p "$INSTALL_DIR/data/captain" "$INSTALL_DIR/data/sailor"
+mkdir -p "$INSTALL_DIR/data/captain" "$INSTALL_DIR/data/sailor" "$INSTALL_DIR/data/lieutenant"
 # Note: world-writable to allow non-root usage across users; tighten if desired (e.g., dedicated group)
-chmod 0777 "$INSTALL_DIR/data" "$INSTALL_DIR/data/captain" "$INSTALL_DIR/data/sailor" || true
+chmod 0777 "$INSTALL_DIR/data" "$INSTALL_DIR/data/captain" "$INSTALL_DIR/data/sailor" "$INSTALL_DIR/data/lieutenant" || true
 
 echo
-echo "Installation complete. Binaries installed to $BIN_DIR: captain, sailor"
+echo "Installation complete. Binaries installed to $BIN_DIR: captain, sailor, lieutenant"
 echo "Project location: $INSTALL_DIR"
 echo
 echo "Try:"
 echo "  captain --serve 8000    # start API server"
 echo "  sailor --serve 8001     # start worker (first run prompts config)"
+echo "  lieutenant --serve 8002  # start lieutenant (first run prompts config)"
 echo
 echo "Note: Data is stored under $INSTALL_DIR/data (currently world-writable for convenience)."
 echo "      For stricter permissions, change ownership to a dedicated user/group and adjust systemd services."
