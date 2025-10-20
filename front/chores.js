@@ -11,7 +11,7 @@ const els = {
     autoToggle: document.getElementById('autoToggle'),
 }
 
-let state = { chores: [], fetching: false }
+let state = { chores: [], fetching: false, sort: null }
 
 function setStatus(text) { els.status.textContent = text }
 
@@ -47,16 +47,62 @@ function fmtTime(t) {
     } catch { return String(t) }
 }
 
-function fmtReqResources(c) {
-    // configuration is a JSON string; expected keys: cpus, gpus
+// Helpers for resources parsing/sorting
+function parseReqResources(c) {
     try {
         const cfg = typeof c.configuration === 'string' ? JSON.parse(c.configuration) : (c.configuration || {})
-        const cpus = Number(cfg?.cpus) || 0
-        const gpus = Number(cfg?.gpus) || 0
-        if (cpus === 0 && gpus === 0) return '-'
-        return `${cpus} CPU · ${gpus} GPU`
+        return { cpus: Number(cfg?.cpus) || 0, gpus: Number(cfg?.gpus) || 0 }
     } catch {
-        return '-'
+        return { cpus: 0, gpus: 0 }
+    }
+}
+
+function fmtReqResources(c) {
+    const { cpus, gpus } = parseReqResources(c)
+    if (cpus === 0 && gpus === 0) return '-'
+    return `${cpus} CPU · ${gpus} GPU`
+}
+
+// Sorting helpers
+const COL_KEYS = ['id', 'status', 'owner', 'req', 'reqres', 'sailor', 'pid', 'infos', 'start', 'end']
+
+function getSortValue(c, key) {
+    switch (key) {
+        case 'id': return Number(c.ID) || 0
+        case 'status': return statusPriority(c.Status)
+        case 'owner': return (c.owner ?? '').toLowerCase()
+        case 'req': return (c.RService ?? c.RSailor ?? '').toLowerCase()
+        case 'reqres': {
+            const { cpus, gpus } = parseReqResources(c)
+            return [cpus, gpus]
+        }
+        case 'sailor': return (c.Sailor ?? '').toLowerCase()
+        case 'pid': return Number(c.PID) || 0
+        case 'infos': return (c.Infos ?? '').toLowerCase()
+        case 'start': return Number(c.Start) || 0
+        case 'end': return Number(c.End) || 0
+        default: return ''
+    }
+}
+
+function makeComparator(sort) {
+    return (a, b) => {
+        let va = getSortValue(a, sort.key)
+        let vb = getSortValue(b, sort.key)
+        let cmp = 0
+        if (Array.isArray(va) && Array.isArray(vb)) {
+            // compare cpus then gpus
+            cmp = va[0] - vb[0]
+            if (cmp === 0) cmp = va[1] - vb[1]
+        } else if (typeof va === 'number' && typeof vb === 'number') {
+            cmp = va - vb
+        } else {
+            cmp = String(va).localeCompare(String(vb))
+        }
+        if (sort.dir === 'desc') cmp = -cmp
+        // stable-ish tie-breaker by ID desc (newer first)
+        if (cmp === 0) cmp = (Number(b?.ID || 0) - Number(a?.ID || 0))
+        return cmp
     }
 }
 
@@ -99,7 +145,8 @@ function updateRow(tr, c) {
 
 function buildTable(chores) {
     els.tbody.innerHTML = ''
-    for (const c of chores) els.tbody.appendChild(createRow(c))
+    const list = state.sort ? [...chores].sort(makeComparator(state.sort)) : chores
+    for (const c of list) els.tbody.appendChild(createRow(c))
     els.count.textContent = String(chores.length)
 }
 
@@ -118,16 +165,26 @@ function patchTable(chores) {
             updateRow(tr, c)
         }
     }
-    // reorder by status priority, then ID desc
+    // reorder rows
     const rows = [...els.tbody.querySelectorAll('.chore-row')]
-    rows.sort((ra, rb) => {
-        const a = map.get(ra.dataset.id)
-        const b = map.get(rb.dataset.id)
-        const pa = statusPriority(a?.Status)
-        const pb = statusPriority(b?.Status)
-        if (pa !== pb) return pa - pb
-        return Number(b?.ID || 0) - Number(a?.ID || 0)
-    })
+    if (state.sort) {
+        const cmp = makeComparator(state.sort)
+        rows.sort((ra, rb) => {
+            const a = map.get(ra.dataset.id)
+            const b = map.get(rb.dataset.id)
+            return cmp(a ?? {}, b ?? {})
+        })
+    } else {
+        // default: by status priority, then ID desc (keeps previous behavior)
+        rows.sort((ra, rb) => {
+            const a = map.get(ra.dataset.id)
+            const b = map.get(rb.dataset.id)
+            const pa = statusPriority(a?.Status)
+            const pb = statusPriority(b?.Status)
+            if (pa !== pb) return pa - pb
+            return Number(b?.ID || 0) - Number(a?.ID || 0)
+        })
+    }
     for (const tr of rows) els.tbody.appendChild(tr)
     els.count.textContent = String(chores.length)
 }
@@ -170,7 +227,27 @@ async function fetchIncremental() {
     }
 }
 
+function initSorting() {
+    const table = els.tbody?.closest('table')
+    const headers = table?.querySelectorAll('thead th')
+    if (!headers || headers.length === 0) return
+    headers.forEach((th, idx) => {
+        const key = th.dataset?.key || COL_KEYS[idx]
+        if (!key) return
+        th.style.cursor = 'pointer'
+        th.addEventListener('click', () => {
+            if (state.sort && state.sort.key === key) {
+                state.sort.dir = state.sort.dir === 'asc' ? 'desc' : 'asc'
+            } else {
+                state.sort = { key, dir: 'asc' }
+            }
+            patchTable(state.chores)
+        })
+    })
+}
+
 els.refreshBtn.addEventListener('click', () => fetchIncremental())
 fetchInitial()
 const UPDATE_MS = 5000
 setInterval(fetchIncremental, UPDATE_MS)
+initSorting()
