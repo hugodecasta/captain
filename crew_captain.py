@@ -59,7 +59,6 @@ def create_chore_row(chore, is_small):
     script = config.get('script', 'N/A')
     out = config.get('output_file', 'N/A')
     if is_small:
-        wd = wd[:10] + '...'
         if status == CHORE_STATUS_CANCEL_REQUESTED:
             status = "CR"
         elif status == CHORE_STATUS_PENDING:
@@ -70,9 +69,7 @@ def create_chore_row(chore, is_small):
             status = "C"
         elif status == CHORE_STATUS_FAILED:
             status = "F"
-        chore["RSailor"] = ".."
-        chore["RService"] = ".."
-        chore["Owner"] = ".."
+        return [chore["ID"], cpus, gpus, script, status, chore["Infos"]]
     return [chore["ID"], chore["owner"], chore["RSailor"], chore["RService"], cpus, gpus, wd, script, out, status, chore["Sailor"], chore["Infos"]]
 
 
@@ -133,6 +130,8 @@ if __name__ == "__main__":
             print("No chores found")
         else:
             headers = ["ID", "Owner", "RSlr", "RSrv", "CPUs", "GPUs", "WD", "SC", "Out", "Status", "Sailor", "Infos"]
+            if is_small:
+                headers = ["ID", "CPUs", "GPUs", "SC", "Status", "Infos"]  # Shortened for small display
             rows = [
                 create_chore_row(chore, is_small)
                 for chore in chores
