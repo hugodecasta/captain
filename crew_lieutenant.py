@@ -4,6 +4,7 @@ from boat_chest import get_chore_requested_ressources, assign_chore_sailor, get_
 from boat_chest import log_message
 from boat_chest import CHORE_STATUS_PENDING, CHORE_STATUS_ASSIGNED, CHORE_STATUS_RUNNING, CHORE_STATUS_COMPLETED, CHORE_STATUS_FAILED
 from boat_chest import create_service
+from boat_chest import SAILOR_STATUS_DOWN
 import time
 
 
@@ -35,6 +36,7 @@ def assign_chore(chore, sailors):
         raise Exception("Chore has no RSailor or RService")
 
     candidates = [c for c in candidates if c is not None and c['CPUS'] is not None]
+    candidates = [c for c in candidates if c["Status"] != SAILOR_STATUS_DOWN]
 
     for candidate in candidates:
         sailor_name = candidate["Name"]
