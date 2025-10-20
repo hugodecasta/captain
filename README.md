@@ -6,6 +6,12 @@ A minimal resource scheduler with a Captain (controller) and Sailors (workers).
 
 ### Common installation
 
+Prepare requirements
+```bash
+sudo apt update
+sudo apt install python
+```
+
 Clone the repository
 ```bash
 git clone https://github.com/hugodecasta/captain.git

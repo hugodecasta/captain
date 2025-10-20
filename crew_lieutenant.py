@@ -8,6 +8,7 @@ from boat_chest import SAILOR_STATUS_DOWN
 from boat_chest import requires_root
 import time
 
+import pwd
 import random
 
 
@@ -106,22 +107,84 @@ def loop():
         time.sleep(1)
 
 
+# region -------------------------------------------------------- FRONT SERVER
+# region --------------------------------------------------------
+# region --------------------------------------------------------
+# region --------------------------------------------------------
+# region --------------------------------------------------------
+
+PORT = 9874
+
+
+def start_front_server(port):
+    from flask import Flask, request, jsonify
+
+    app = Flask("Captain front")
+
+    # serve all front file from ./front
+    from flask import send_from_directory
+
+    @app.route('/<path:path>')
+    def send_front(path):
+        return send_from_directory('front', path)
+
+    # serve index.html from ./front
+    @app.route('/')
+    def send_index():
+        return send_from_directory('front', 'index.html')
+
+    # crew service
+    @app.route('/api/crew/', methods=['GET'])
+    def get_crew():
+        crew = get_sailors()
+        return jsonify(crew)
+
+    # chores
+    @app.route('/api/chores/', methods=['GET'])
+    def get_chores_api():
+        import os
+        chores = get_chores()
+        for chore in chores:
+            status = get_chore_status(chore)
+            chore["Status"] = status
+            if chore["Owner"] is not None:
+                chore["Owner"] = pwd.getpwuid(chore["Owner"]).pw_name
+        return jsonify(chores)
+
+    app.run(host='0.0.0.0', port=port)
+
 # region -------------------------------------------------------- MAIN
 # region --------------------------------------------------------
 # region --------------------------------------------------------
 # region --------------------------------------------------------
 # region --------------------------------------------------------
 
+
 if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Lieutenant CLI")
     parser.add_argument('--create-service', action='store_true', help='Create a new service')
+    parser.add_argument('--create-web-service', action='store_true', help='Create a new web service')
+    parser.add_argument('--web-server', action='store_true', help='Start the web server')
 
     args = parser.parse_args()
     if args.create_service:
         requires_root()
         create_service_lieutenant()
+        exit(0)
+
+    elif args.create_web_service:
+        requires_root()
+        create_service(
+            "lieutenant-web",
+            "Captain Lieutenant Web service",
+            "/usr/local/bin/lieutenant --web-server",
+        )
+        exit(0)
+
+    elif args.web_server:
+        start_front_server(PORT)
         exit(0)
 
     loop()

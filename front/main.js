@@ -1,229 +1,404 @@
-(function () {
-    const qs = s => document.querySelector(s)
-    const qsa = s => Array.from(document.querySelectorAll(s))
-    const state = { token: null }
+// main.js (ES module)
+// Renders the cluster map in two modes: By Sailor and By Service
 
-    function switchView(id) {
-        qsa('.view').forEach(v => v.classList.add('hidden'))
-        qs('#' + id).classList.remove('hidden')
+const API = {
+    crew: '/api/crew/'
+}
+
+const els = {
+    grid: document.getElementById('grid'),
+    legend: document.getElementById('legend'),
+    status: document.getElementById('status'),
+    refreshBtn: document.getElementById('refreshBtn'),
+    modeToggle: document.getElementById('modeToggle'),
+    modeLabel: document.getElementById('modeLabel'),
+}
+
+const Mode = {
+    Sailor: 'sailor',
+    Service: 'service',
+}
+
+let state = {
+    mode: Mode.Sailor,
+    crew: [],
+    fetching: false,
+}
+
+// Local storage helpers
+const MODE_STORAGE_KEY = 'captain.mode'
+function loadMode() {
+    try {
+        const m = localStorage.getItem(MODE_STORAGE_KEY)
+        if (m === Mode.Sailor || m === Mode.Service) return m
+    } catch { }
+    return Mode.Sailor
+}
+function saveMode(mode) {
+    try { localStorage.setItem(MODE_STORAGE_KEY, mode) } catch { }
+}
+
+function setStatus(text) {
+    els.status.textContent = text
+}
+
+function statusDot(status) {
+    const cls = status === 'DOWN' ? 'down' : status === 'WORKING' ? 'warn' : 'ok'
+    return `<span class="dot ${cls}" title="${status}"></span>`
+}
+
+function tag(text) { return `<span class="tag">${text}</span>` }
+
+function kv(k, v) {
+    return `<div class="kv"><span class="k">${k}</span><span class="v">${v}</span></div>`
+}
+
+function fmtResources(s) {
+    const freeCPU = (s.CPUS ?? 0) - (s.UsedCPUS ?? 0)
+    const freeGPU = (s.GPUS ?? 0) - (s.UsedGPUS ?? 0)
+    return `${freeCPU}/${s.CPUS} CPU · ${freeGPU}/${s.GPUS} GPU · ${s.RAM} RAM`
+}
+
+// ========== Sailor mode: build and patch ==========
+function sailorLegend() {
+    els.legend.innerHTML = `
+  <h3>Legend</h3>
+  <div class="row"><span class="swatch" style="background: var(--ok)"></span> Ready</div>
+  <div class="row"><span class="swatch" style="background: var(--warn)"></span> Working</div>
+  <div class="row"><span class="swatch" style="background: var(--down)"></span> Down</div>
+  <small>Showing each Sailor (node) with resources and services.</small>
+  `
+}
+
+function createSailorCard(s) {
+    const article = document.createElement('article')
+    article.className = 'card'
+    article.setAttribute('role', 'region')
+    article.setAttribute('aria-label', `Sailor ${s.Name}`)
+    article.dataset.sailor = s.Name
+    article.innerHTML = `
+    <div class="head">
+    <span class="dot ${s.Status === 'DOWN' ? 'down' : s.Status === 'WORKING' ? 'warn' : 'ok'}" title="${s.Status}"></span>
+    <div class="title">${s.Name}</div>
+    <div class="meta">· <span class="last-seen">${new Date(s.LastSeen * 1000).toLocaleTimeString()}</span></div>
+    </div>
+    <div class="body">
+    <div class="kv resources"><span class="k">Resources</span><span class="v">${fmtResources(s)}</span></div>
+    <div class="kv status"><span class="k">Status</span><span class="v status-text">${s.Status}</span></div>
+    <div class="tags" title="Services"></div>
+    </div>
+  `
+    const tags = article.querySelector('.tags')
+    for (const svc of (s.Services || [])) {
+        const span = document.createElement('span')
+        span.className = 'tag'
+        span.textContent = svc
+        tags.appendChild(span)
     }
+    return article
+}
 
-    function switchTab(name) {
-        qsa('.tab').forEach(t => t.classList.remove('active'))
-        const btn = qsa('.tab').find(t => t.dataset.tab === name)
-        if (btn) btn.classList.add('active')
-        qs('#cluster-sailors').classList.toggle('hidden', name !== 'sailors')
-        qs('#cluster-services').classList.toggle('hidden', name !== 'services')
+function updateSailorCard(card, s) {
+    // status dot
+    const dot = card.querySelector('.head .dot')
+    if (dot) {
+        dot.classList.remove('ok', 'warn', 'down')
+        dot.classList.add(s.Status === 'DOWN' ? 'down' : s.Status === 'WORKING' ? 'warn' : 'ok')
+        dot.title = s.Status
     }
-
-    function statusColor(s) {
-        s = (s || '').toLowerCase()
-        if (s === 'idle') return 'green'
-        if (s === 'busy') return 'yellow'
-        if (s === 'full') return 'red'
-        if (s === 'down') return 'grey'
-        return 'grey'
-    }
-
-    async function fetchJSON(url, opts = {}) {
-        const r = await fetch(url, opts)
-        if (!r.ok) {
-            let msg = await r.text()
-            try {
-                const ct = r.headers.get('content-type') || ''
-                if (ct.includes('application/json')) {
-                    const j = JSON.parse(msg)
-                    msg = j.detail || j.message || JSON.stringify(j)
-                }
-            } catch { }
-            const err = new Error(msg)
-            err.status = r.status
-            throw err
+    // last seen
+    const lastSeen = card.querySelector('.head .last-seen')
+    if (lastSeen) lastSeen.textContent = new Date(s.LastSeen * 1000).toLocaleTimeString()
+    // resources
+    const res = card.querySelector('.body .resources .v')
+    if (res) res.textContent = fmtResources(s)
+    // status text
+    const st = card.querySelector('.body .status .status-text')
+    if (st) st.textContent = s.Status
+    // services tags
+    const tags = card.querySelector('.body .tags')
+    if (tags) {
+        const wanted = new Set((s.Services || []))
+        // remove tags not present
+        for (const el of Array.from(tags.children)) {
+            if (!wanted.has(el.textContent)) tags.removeChild(el)
         }
-        return r.json()
-    }
-
-    async function renderSailors() {
-        const container = qs('#cluster-sailors')
-        container.innerHTML = '<div class="grid"></div>'
-        const grid = container.querySelector('.grid')
-        const crew = await fetchJSON('/crew')
-        crew.forEach(s => {
-            const div = document.createElement('div')
-            div.className = `square ${statusColor(s.derived_status || s.derived_status)}`
-            div.innerHTML = `
-        <div class="name">${s.name || '?'} </div>
-        <div class="status">${s.derived_status || '-'}</div>
-        <div class="tooltip">
-          <div><b>${s.name || ''}</b> @ ${s.ip || '?'}:${s.port || 8001}</div>
-          <div>Services: ${(Array.isArray(s.services) ? s.services.join(',') : s.services) || '-'}</div>
-          <div>CPUs: ${s.used_cpus || 0}/${s.cpus || 0}</div>
-          <div>GPUs: ${s.used_gpus || 0}/${(s.gpus || []).length}</div>
-          <div>RAM: ${s.ram || 0}</div>
-          <div>Last seen: ${s.last_seen || 0}</div>
-        </div>`
-            grid.appendChild(div)
-        })
-        attachTooltips(container)
-    }
-
-    async function renderServices() {
-        const container = qs('#cluster-services')
-        container.innerHTML = ''
-        const crew = await fetchJSON('/crew')
-        const bySvc = {}
-        crew.forEach(s => {
-            let svcs = s.services
-            if (typeof svcs === 'string') svcs = svcs.split(',').map(x => x.trim()).filter(Boolean);
-            (svcs || ['-']).forEach(sv => {
-                (bySvc[sv] = bySvc[sv] || []).push(s)
-            })
-        })
-        Object.entries(bySvc).forEach(([svc, list]) => {
-            const section = document.createElement('section')
-            section.innerHTML = `<h3>${svc}</h3><div class="grid"></div>`
-            const grid = section.querySelector('.grid')
-            list.forEach(s => {
-                const div = document.createElement('div')
-                div.className = `square ${statusColor(s.status || s.derived_status)}`
-                div.innerHTML = `
-                                    <div class="name">${s.name || '?'} </div>
-                                    <div class="status">${s.status || '-'}</div>
-                                    <div class="tooltip">
-                                        <div><b>${s.name || ''}</b> @ ${s.ip || '?'}:${s.port || 8001}</div>
-                                        <div>Services: ${(Array.isArray(s.services) ? s.services.join(',') : s.services) || '-'}</div>
-                                        <div>CPUs: ${s.used_cpus || 0}/${s.cpus || 0}</div>
-                                        <div>GPUs: ${s.used_gpus || 0}/${(s.gpus || []).length}</div>
-                                        <div>RAM: ${s.ram || 0}</div>
-                                        <div>Last seen: ${s.last_seen || 0}</div>
-                                    </div>`
-                grid.appendChild(div)
-            })
-            container.appendChild(section)
-        })
-        attachTooltips(container)
-    }
-
-    async function refreshChores() {
-        const tbody = qs('#chores-table tbody')
-        tbody.innerHTML = ''
-        const headers = state.token ? { 'Authorization': 'Bearer ' + state.token } : {}
-        const chores = await fetchJSON('/me/chores', { headers })
-        chores.forEach(c => {
-            const tr = document.createElement('tr')
-            const res = c.ressources || {}
-            const btn = document.createElement('button')
-            btn.className = 'small'
-            btn.textContent = 'Cancel'
-            btn.onclick = async () => {
-                try {
-                    await fetchJSON('/me/cancel', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', ...headers },
-                        body: JSON.stringify({ chore_id: c.chore_id })
-                    })
-                    await refreshChores()
-                } catch (e) { alert('Cancel failed: ' + e) }
+        // add missing tags
+        for (const svc of wanted) {
+            if (![...tags.children].some(ch => ch.textContent === svc)) {
+                const span = document.createElement('span')
+                span.className = 'tag'
+                span.textContent = svc
+                tags.appendChild(span)
             }
-            tr.innerHTML = `
-        <td>${c.chore_id}</td>
-        <td>${c.status || '-'}</td>
-        <td>${c.sailor || '-'}</td>
-        <td>${res.cpus || 0}</td>
-        <td>${res.gpus || 0}</td>
-        <td>${c.reason || '-'}</td>
-        <td></td>`
-            tr.lastElementChild.appendChild(btn)
-            tbody.appendChild(tr)
-        })
-    }
-
-    // Events
-    qs('#btn-cluster').addEventListener('click', async () => {
-        switchView('view-cluster')
-        await renderSailors()
-        await renderServices()
-    })
-    qs('#btn-chores').addEventListener('click', () => {
-        switchView('view-chores')
-    })
-    qsa('.tab').forEach(t => t.addEventListener('click', async () => {
-        switchTab(t.dataset.tab)
-        if (t.dataset.tab === 'sailors') await renderSailors()
-        if (t.dataset.tab === 'services') await renderServices()
-    }))
-
-    qs('#login-form').addEventListener('submit', async (e) => {
-        e.preventDefault()
-        const fd = new FormData(e.target)
-        const creds = Object.fromEntries(fd.entries())
-        const msg = qs('#login-msg')
-        msg.textContent = ''
-        try {
-            const data = await fetchJSON('/login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(creds)
-            })
-            state.token = data.token
-            qs('#login-panel').classList.add('hidden')
-            qs('#chores-panel').classList.remove('hidden')
-            await refreshChores()
-        } catch (err) {
-            msg.textContent = 'Login failed: ' + (err && err.message ? err.message : 'Unknown error')
         }
-    })
-
-    qs('#refresh-chores').addEventListener('click', refreshChores)
-
-    // Default view
-    switchView('view-cluster')
-    switchTab('sailors')
-    renderSailors()
-    renderServices()
-    // Attach tooltip logic for initial render (sailors view)
-    attachTooltips(document)
-
-    // Tooltip positioning helpers
-    function attachTooltips(root) {
-        const nodes = (root === document) ? qsa('.square') : Array.from(root.querySelectorAll('.square'))
-        nodes.forEach(el => {
-            const tt = el.querySelector('.tooltip')
-            if (!tt) return
-            el.addEventListener('mouseenter', () => {
-                tt.style.display = 'block'
-                // delay to ensure size computed
-                requestAnimationFrame(() => positionTooltip(el, tt))
-            })
-            el.addEventListener('mousemove', () => positionTooltip(el, tt))
-            el.addEventListener('mouseleave', () => {
-                tt.style.display = 'none'
-                tt.style.left = ''
-                tt.style.top = ''
-                tt.style.bottom = ''
-            })
-        })
     }
+}
 
-    function positionTooltip(el, tt) {
-        const rect = el.getBoundingClientRect()
-        // choose above if space, else below
-        const ttHeight = tt.offsetHeight || 0
-        const aboveOK = (rect.top - ttHeight - 8) >= 0
-        if (aboveOK) {
-            tt.style.top = ''
-            tt.style.bottom = `${rect.height + 8}px`
+function buildSailorGrid(crew) {
+    sailorLegend()
+    els.grid.innerHTML = ''
+    const sorted = [...crew].sort((a, b) => a.Name.localeCompare(b.Name))
+    for (const s of sorted) {
+        els.grid.appendChild(createSailorCard(s))
+    }
+}
+
+function patchSailorGrid(crew) {
+    sailorLegend()
+    const map = new Map(crew.map(s => [s.Name, s]))
+    // remove cards no longer present
+    for (const card of Array.from(els.grid.querySelectorAll('.card[data-sailor]'))) {
+        if (!map.has(card.dataset.sailor)) card.remove()
+    }
+    // update existing and add missing
+    for (const s of crew) {
+        let card = els.grid.querySelector(`.card[data-sailor="${CSS.escape(s.Name)}"]`)
+        if (!card) {
+            card = createSailorCard(s)
+            els.grid.appendChild(card)
         } else {
-            tt.style.bottom = ''
-            tt.style.top = `${rect.height + 8}px`
+            updateSailorCard(card, s)
         }
-        // horizontal clamp within viewport
-        const ttWidth = tt.offsetWidth || 0
-        let x = rect.left + rect.width / 2 - ttWidth / 2
-        const minX = 8
-        const maxX = Math.max(minX, window.innerWidth - ttWidth - 8)
-        x = Math.max(minX, Math.min(x, maxX))
-        // set left relative to square
-        tt.style.left = `${x - rect.left}px`
     }
-})()
+    // reorder cards alphabetically by sailor name (stable, minimal DOM moves)
+    const namesSorted = [...map.keys()].sort((a, b) => a.localeCompare(b))
+    for (const name of namesSorted) {
+        const card = els.grid.querySelector(`.card[data-sailor="${CSS.escape(name)}"]`)
+        if (card) els.grid.appendChild(card)
+    }
+}
+
+function groupByService(crew) {
+    const map = new Map()
+    for (const s of crew) {
+        for (const svc of (s.Services || [])) {
+            if (!map.has(svc)) map.set(svc, [])
+            map.get(svc).push(s)
+        }
+    }
+    return map // Map<string, Sailor[]>
+}
+
+// ========== Service mode: build and patch ==========
+function serviceLegend() {
+    els.legend.innerHTML = `
+    <h3>Legend</h3>
+    <div class="row"><span class="swatch" style="background: var(--accent)"></span> Service</div>
+    <div class="row"><span class="swatch" style="background: var(--ok)"></span> Ready Sailor</div>
+    <div class="row"><span class="swatch" style="background: var(--warn)"></span> Working Sailor</div>
+    <div class="row"><span class="swatch" style="background: var(--down)"></span> Down Sailor</div>
+    <small>Grouping sailors by provided service.</small>
+  `
+}
+
+function createServiceCard(svc, sailors) {
+    const article = document.createElement('article')
+    article.className = 'card'
+    article.setAttribute('role', 'region')
+    article.setAttribute('aria-label', `Service ${svc}`)
+    article.dataset.service = svc
+
+    const totalCPU = sailors.reduce((n, s) => n + (s.CPUS || 0), 0)
+    const usedCPU = sailors.reduce((n, s) => n + (s.UsedCPUS || 0), 0)
+    const totalGPU = sailors.reduce((n, s) => n + (s.GPUS || 0), 0)
+    const usedGPU = sailors.reduce((n, s) => n + (s.UsedGPUS || 0), 0)
+
+    article.innerHTML = `
+      <div class="head">
+        <span class="dot" style="background: var(--accent)"></span>
+        <div class="title">${svc}</div>
+        <div class="meta">· <span class="svc-count">${sailors.length}</span> sailor(s)</div>
+      </div>
+      <div class="body">
+        <div class="kv capacity"><span class="k">Capacity</span><span class="v"><span class="cap-text">${(totalCPU - usedCPU)}/${totalCPU} CPU · ${(totalGPU - usedGPU)}/${totalGPU} GPU</span></span></div>
+        <div class="svc-list"></div>
+      </div>
+    `
+    const list = article.querySelector('.svc-list')
+    const prio = (s) => (s.Status === 'WORKING' ? 0 : s.Status === 'READY' ? 1 : 2)
+    const sailorsSorted = [...sailors].sort((a, b) => {
+        const pa = prio(a), pb = prio(b)
+        if (pa !== pb) return pa - pb
+        return a.Name.localeCompare(b.Name)
+    })
+    for (const s of sailorsSorted) {
+        list.appendChild(createServiceSailorRow(s))
+    }
+    return article
+}
+
+function createServiceSailorRow(s) {
+    const row = document.createElement('div')
+    row.className = 'kv svc-sailor'
+    row.dataset.name = s.Name
+    row.innerHTML = `
+      <span class="k"><span class="dot ${s.Status === 'DOWN' ? 'down' : s.Status === 'WORKING' ? 'warn' : 'ok'}" title="${s.Status}"></span> ${s.Name}</span>
+      <span class="v"><span class="res-text">${(s.CPUS - s.UsedCPUS)}/${s.CPUS} CPU · ${(s.GPUS - s.UsedGPUS)}/${s.GPUS} GPU</span></span>
+    `
+    return row
+}
+
+function updateServiceCard(card, sailors) {
+    // header count
+    const count = card.querySelector('.svc-count')
+    if (count) count.textContent = String(sailors.length)
+    // capacity
+    const totalCPU = sailors.reduce((n, s) => n + (s.CPUS || 0), 0)
+    const usedCPU = sailors.reduce((n, s) => n + (s.UsedCPUS || 0), 0)
+    const totalGPU = sailors.reduce((n, s) => n + (s.GPUS || 0), 0)
+    const usedGPU = sailors.reduce((n, s) => n + (s.UsedGPUS || 0), 0)
+    const cap = card.querySelector('.cap-text')
+    if (cap) cap.textContent = `${(totalCPU - usedCPU)}/${totalCPU} CPU · ${(totalGPU - usedGPU)}/${totalGPU} GPU`
+
+    const list = card.querySelector('.svc-list')
+    const map = new Map(sailors.map(s => [s.Name, s]))
+    // remove rows not present
+    for (const row of Array.from(list.querySelectorAll('.svc-sailor'))) {
+        if (!map.has(row.dataset.name)) row.remove()
+    }
+    // update or add rows
+    for (const s of sailors) {
+        let row = list.querySelector(`.svc-sailor[data-name="${CSS.escape(s.Name)}"]`)
+        if (!row) {
+            list.appendChild(createServiceSailorRow(s))
+        } else {
+            const dot = row.querySelector('.dot')
+            if (dot) {
+                dot.classList.remove('ok', 'warn', 'down')
+                dot.classList.add(s.Status === 'DOWN' ? 'down' : s.Status === 'WORKING' ? 'warn' : 'ok')
+                dot.title = s.Status
+            }
+            const res = row.querySelector('.res-text')
+            if (res) res.textContent = `${(s.CPUS - s.UsedCPUS)}/${s.CPUS} CPU · ${(s.GPUS - s.UsedGPUS)}/${s.GPUS} GPU`
+        }
+    }
+    // reorder rows by status (WORKING, READY, DOWN) then by name
+    const prio = (s) => (s.Status === 'WORKING' ? 0 : s.Status === 'READY' ? 1 : 2)
+    const sailorsSorted = [...map.values()].sort((a, b) => {
+        const pa = prio(a), pb = prio(b)
+        if (pa !== pb) return pa - pb
+        return a.Name.localeCompare(b.Name)
+    })
+    for (const s of sailorsSorted) {
+        const row = list.querySelector(`.svc-sailor[data-name="${CSS.escape(s.Name)}"]`)
+        if (row) list.appendChild(row)
+    }
+}
+
+function buildServiceGrid(crew) {
+    serviceLegend()
+    els.grid.innerHTML = ''
+    const grouped = groupByService(crew)
+    const services = [...grouped.keys()].sort((a, b) => a.localeCompare(b))
+    for (const svc of services) {
+        els.grid.appendChild(createServiceCard(svc, grouped.get(svc)))
+    }
+}
+
+function patchServiceGrid(crew) {
+    serviceLegend()
+    const grouped = groupByService(crew)
+    const services = new Set(grouped.keys())
+    // remove service cards no longer present
+    for (const card of Array.from(els.grid.querySelectorAll('.card[data-service]'))) {
+        if (!services.has(card.dataset.service)) card.remove()
+    }
+    // update or add
+    for (const [svc, sailors] of grouped.entries()) {
+        let card = els.grid.querySelector(`.card[data-service="${CSS.escape(svc)}"]`)
+        if (!card) {
+            card = createServiceCard(svc, sailors)
+            els.grid.appendChild(card)
+        } else {
+            updateServiceCard(card, sailors)
+        }
+    }
+    // reorder service cards alphabetically
+    const ordered = [...services].sort((a, b) => a.localeCompare(b))
+    for (const svc of ordered) {
+        const card = els.grid.querySelector(`.card[data-service="${CSS.escape(svc)}"]`)
+        if (card) els.grid.appendChild(card)
+    }
+}
+
+function renderInitial() {
+    if (state.mode === Mode.Sailor) buildSailorGrid(state.crew)
+    else buildServiceGrid(state.crew)
+}
+
+function patchRender(newCrew) {
+    if (state.mode === Mode.Sailor) patchSailorGrid(newCrew)
+    else patchServiceGrid(newCrew)
+}
+
+async function fetchCrewInitial() {
+    setStatus('Loading crew…')
+    try {
+        const res = await fetch(API.crew, { cache: 'no-store' })
+        if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+        const data = await res.json()
+        state.crew = (Array.isArray(data) ? data : [])
+        setStatus(`Loaded ${state.crew.length} sailor(s).`)
+        renderInitial()
+    } catch (err) {
+        console.error(err)
+        setStatus('Failed to load crew. Using sample data.')
+        state.crew = sampleCrew()
+        renderInitial()
+    }
+}
+
+async function fetchCrewIncremental() {
+    if (state.fetching) return
+    state.fetching = true
+    try {
+        const res = await fetch(API.crew, { cache: 'no-store' })
+        if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+        const data = await res.json()
+        if (Array.isArray(data)) {
+            setStatus(`Updated ${data.length} sailor(s) · ${new Date().toLocaleTimeString()}`)
+            state.crew = data
+            patchRender(state.crew)
+        }
+    } catch (err) {
+        // Keep previous UI, just log
+        console.debug('Incremental fetch failed:', err)
+    } finally {
+        state.fetching = false
+    }
+}
+
+function sampleCrew() {
+    const now = Math.floor(Date.now() / 1000)
+    return [
+        { Name: 'alpha', Services: ['train', 'serve'], CPUS: 16, GPUS: 2, RAM: 64, LastSeen: now, UsedCPUS: 4, UsedGPUS: 1, Status: 'WORKING' },
+        { Name: 'beta', Services: ['serve'], CPUS: 8, GPUS: 0, RAM: 32, LastSeen: now, UsedCPUS: 0, UsedGPUS: 0, Status: 'READY' },
+        { Name: 'gamma', Services: ['train'], CPUS: 24, GPUS: 4, RAM: 128, LastSeen: now - 99999, UsedCPUS: 0, UsedGPUS: 0, Status: 'DOWN' },
+    ]
+}
+
+function initUI() {
+    // Toggle between modes
+    els.modeToggle.addEventListener('change', () => {
+        state.mode = els.modeToggle.checked ? Mode.Service : Mode.Sailor
+        saveMode(state.mode)
+        els.modeLabel.textContent = state.mode === Mode.Sailor ? 'By Sailor' : 'By Service'
+        // Full rebuild on mode switch to reshape grid; subsequent updates are incremental
+        renderInitial()
+    })
+
+    els.refreshBtn.addEventListener('click', () => fetchCrewIncremental())
+
+    // Initialize mode from storage
+    state.mode = loadMode()
+    els.modeToggle.checked = state.mode === Mode.Service
+    els.modeLabel.textContent = state.mode === Mode.Sailor ? 'By Sailor' : 'By Service'
+}
+
+initUI()
+fetchCrewInitial()
+
+// Background incremental updater (smooth, no full re-render)
+const UPDATE_MS = 5000
+setInterval(fetchCrewIncremental, UPDATE_MS)

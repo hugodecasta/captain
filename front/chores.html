@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Captain • Chores</title>
+    <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+    <header class="topbar">
+        <h1>Captain • Chores</h1>
+        <div class="controls">
+            <a class="btn" href="/" title="Back to cluster map">← Cluster</a>
+            <button id="refreshBtn" title="Reload chores">↻</button>
+            <label class="switch" title="Auto-refresh">
+                <input id="autoToggle" type="checkbox" checked />
+                <span class="slider"></span>
+            </label>
+            <span id="count" class="mode-label" title="Total chores">0</span>
+        </div>
+    </header>
+
+    <main>
+        <aside class="legend">
+            <h3>Legend</h3>
+            <div class="row"><span class="swatch" style="background: var(--warn)"></span> Running</div>
+            <div class="row"><span class="swatch" style="background: var(--danger)"></span> Failed</div>
+            <div class="row"><span class="swatch" style="background: var(--warn-light)"></span> Assigned</div>
+            <div class="row"><span class="swatch" style="background: var(--ok)"></span> Completed</div>
+            <div class="row"><span class="swatch" style="background: var(--down)"></span> Pending / Canceled</div>
+            <small>Chores update smoothly without page blinking.</small>
+        </aside>
+        <section class="canvas">
+            <div class="table-wrap">
+                <table class="table" id="table" aria-label="All chores">
+                    <thead>
+                        <tr>
+                            <th style="width:72px;">ID</th>
+                            <th style="width:110px;">Status</th>
+                            <th>Owner</th>
+                            <th>Requested</th>
+                            <th style="width:160px;">Req. Resources</th>
+                            <th>Sailor</th>
+                            <th style="width:90px;">PID</th>
+                            <th>Infos</th>
+                            <th style="width:180px;">Start</th>
+                            <th style="width:180px;">End</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbody">
+                        <!-- rows inserted here -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <footer class="bottombar">
+        <span id="status">Ready.</span>
+    </footer>
+
+    <script type="module" src="chores.js"></script>
+</body>
+
+</html>
