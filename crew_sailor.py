@@ -204,6 +204,7 @@ def create_process(chore_id: int, script: str, working_directory: str, output_fi
         try:
             start_cpu = total_used_cpus
             cpu_set = set(range(start_cpu, start_cpu + cpus))
+            print(start_cpu, '->', cpu_set)
             os.sched_setaffinity(0, cpu_set)
             os.chdir(working_directory)
             os.setgroups([])
