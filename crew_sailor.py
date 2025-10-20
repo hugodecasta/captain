@@ -138,7 +138,7 @@ def attach_process(chore_id: int, pid: int, chore=None):
             log(f"Failed to attach to process {pid} for chore {chore_id}")
             return
         connected_processes[pid] = proc
-        if chore is not None:
+        if chore is None:
             chore = get_chore_by_id(chore_id)
         watch_thread = threading.Thread(target=watch_process, args=(chore_id, pid, chore,))
         watch_thread.start()
