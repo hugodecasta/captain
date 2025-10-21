@@ -141,7 +141,7 @@ def log_message(owner: str, message: str):
 
 def get_version():
     with open(ROOT / "version.txt", "r") as f:
-        version = f.read().strip()
+        version = f.read().strip().split('\n')[0]
     return version
 
 
