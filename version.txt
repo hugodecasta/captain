@@ -1,4 +1,8 @@
 v2.2.0
+------------------ v2.2.1
+
+Fixed unit service user
+
 ------------------ v2.2.0
 
 Be able to see logs in the front

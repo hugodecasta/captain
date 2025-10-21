@@ -185,6 +185,8 @@ def print_table(headers, rows):
 
 def create_service(name, description, command):
     import shlex
+    # get user name
+    user = os.getenv("USER")
     lines = [
         "[Unit]",
         f"Description={description} - Service {name}",
@@ -193,10 +195,9 @@ def create_service(name, description, command):
         "[Service]",
         "Type=simple",
         f"ExecStart={command}",
-        "Restart=always",
-        "RestartSec=3",
+        "Restart=on-failure",
         "Environment=PYTHONUNBUFFERED=1",
-        "User=root",
+        f"User={user}",
         "",
         "[Install]",
         "WantedBy=multi-user.target",
