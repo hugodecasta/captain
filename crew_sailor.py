@@ -13,19 +13,8 @@ import threading
 import time
 import json
 
-
-def log(message: str):
-    log_message("sailor", message)
-
-
 CONFIG_PATH = DATA_DIR / "sailor_config.json"
 
-
-# region -------------------------------------------------------- FUNCTIONS
-# region --------------------------------------------------------
-# region --------------------------------------------------------
-# region --------------------------------------------------------
-# region --------------------------------------------------------
 
 def get_config():
     if not CONFIG_PATH.exists():
@@ -33,6 +22,23 @@ def get_config():
     with open(CONFIG_PATH, 'r') as f:
         config = json.load(f)
         return config
+
+
+def log(message: str):
+    name = "sailor"
+    try:
+        config = get_config()
+        name = f"sailor-{config.get('Name')}"
+    except:
+        pass
+    log_message(name, message)
+
+
+# region -------------------------------------------------------- FUNCTIONS
+# region --------------------------------------------------------
+# region --------------------------------------------------------
+# region --------------------------------------------------------
+# region --------------------------------------------------------
 
 
 def get_sailor(config=None):
