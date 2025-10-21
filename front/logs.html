@@ -175,11 +175,34 @@
             font-size: 11px;
             color: var(--text);
         }
+
+        .btn {
+            display: inline-block;
+            padding: 6px 10px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            background: var(--panel-2);
+            color: var(--text);
+            text-decoration: none;
+            font-size: 12px;
+        }
+
+        .btn:hover {
+            background: var(--hover);
+        }
+
+        th.message-col,
+        td.message-col {
+            white-space: normal;
+            width: 60%;
+            overflow-wrap: anywhere;
+        }
     </style>
 </head>
 
 <body>
     <header>
+        <a href="/" class="btn">← Back</a>
         <h1>Captain Logs</h1>
         <span class="status" id="headerStatus"></span>
     </header>
@@ -261,8 +284,28 @@
             try { return ('' + str) } catch { return '' }
         }
 
+        function pad2(n) { return (n < 10 ? '0' : '') + n }
+        function formatTimestamp(v) {
+            if (v === null || v === undefined) return ''
+            let d
+            if (typeof v === 'number') {
+                const ms = v > 1e12 ? v : v * 1000
+                d = new Date(ms)
+            } else {
+                const parsed = Date.parse(String(v))
+                if (isNaN(parsed)) return sanitize(v)
+                d = new Date(parsed)
+            }
+            const y = d.getFullYear()
+            const m = pad2(d.getMonth() + 1)
+            const day = pad2(d.getDate())
+            const hh = pad2(d.getHours())
+            const mm = pad2(d.getMinutes())
+            return `${y}-${m}-${day} ${hh}:${mm}`
+        }
+
         function orderColumns(cols) {
-            const preferred = ['time', 'timestamp', 'date', 'owner', 'level', 'message', 'msg']
+            const preferred = ['time', 'timestamp', 'date', 'level', 'message', 'msg']
             const prefIndex = k => {
                 const i = preferred.indexOf(k.toLowerCase())
                 return i === -1 ? 999 : i
@@ -278,25 +321,34 @@
                 tableWrapEl.innerHTML = `<div class="empty">No logs</div>`
                 return
             }
-            // Build column set from all rows to handle heterogeneous shapes
             const colSet = new Set()
             for (const row of logs) Object.keys(row || {}).forEach(k => colSet.add(k))
-            const cols = orderColumns(Array.from(colSet))
+            // drop owner column
+            let cols = Array.from(colSet).filter(k => (k || '').toLowerCase() !== 'owner')
+            cols = orderColumns(cols)
 
-            // Cap rows for performance
+            const messageKey = cols.find(k => ['message', 'msg'].includes(k.toLowerCase()))
+            const tsKeys = new Set(['time', 'timestamp', 'date', 'created_at'])
+
             const MAX = 1000
             const rows = logs.slice(0, MAX)
 
             let html = '<table><thead><tr>'
-            for (const c of cols) html += `<th>${sanitize(c)}</th>`
+            for (const c of cols) {
+                const cls = (messageKey && c === messageKey) ? ' class="message-col"' : ''
+                html += `<th${cls}>${sanitize(c)}</th>`
+            }
             html += '</tr></thead><tbody>'
 
             for (const r of rows) {
                 html += '<tr>'
                 for (const c of cols) {
+                    const lc = c.toLowerCase()
                     let v = (r && r[c] !== undefined && r[c] !== null) ? r[c] : ''
-                    if (typeof v === 'object') v = JSON.stringify(v)
-                    html += `<td title="${sanitize(v)}">${sanitize(v)}</td>`
+                    if (tsKeys.has(lc)) v = formatTimestamp(v)
+                    else if (typeof v === 'object') v = JSON.stringify(v)
+                    const cls = (messageKey && c === messageKey) ? ' class="message-col"' : ''
+                    html += `<td${cls} title="${sanitize(v)}">${sanitize(v)}</td>`
                 }
                 html += '</tr>'
             }
