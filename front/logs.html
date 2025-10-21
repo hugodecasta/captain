@@ -1,0 +1,332 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <title>Captain Logs</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <style>
+        :root {
+            --bg: #0f172a;
+            --panel: #111827;
+            --panel-2: #0b1220;
+            --text: #e5e7eb;
+            --muted: #9ca3af;
+            --accent: #3b82f6;
+            --border: #1f2937;
+            --hover: #374151;
+            --danger: #ef4444;
+        }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font: 14px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji";
+        }
+
+        header {
+            padding: 12px 16px;
+            background: var(--panel);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        header h1 {
+            margin: 0;
+            font-size: 16px;
+            font-weight: 600;
+            letter-spacing: 0.2px;
+        }
+
+        .container {
+            display: grid;
+            grid-template-columns: 260px 1fr;
+            height: calc(100vh - 54px);
+        }
+
+        .sidebar {
+            border-right: 1px solid var(--border);
+            background: var(--panel-2);
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
+
+        .sidebar .search {
+            padding: 8px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .sidebar input[type="text"] {
+            width: 100%;
+            padding: 8px 10px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            background: var(--panel);
+            color: var(--text);
+            outline: none;
+        }
+
+        .owners {
+            padding: 8px;
+            overflow: auto;
+            flex: 1;
+        }
+
+        .owner-btn {
+            width: 100%;
+            text-align: left;
+            padding: 8px 10px;
+            border-radius: 6px;
+            border: 1px solid transparent;
+            background: transparent;
+            color: var(--text);
+            cursor: pointer;
+            margin-bottom: 6px;
+        }
+
+        .owner-btn:hover {
+            background: var(--hover);
+        }
+
+        .owner-btn.active {
+            background: rgba(59, 130, 246, 0.15);
+            border-color: rgba(59, 130, 246, 0.35);
+        }
+
+        .main {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+            min-height: 0;
+        }
+
+        .toolbar {
+            padding: 8px;
+            border-bottom: 1px solid var(--border);
+            background: var(--panel);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            justify-content: space-between;
+        }
+
+        .status {
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .table-wrap {
+            overflow: auto;
+            flex: 1;
+        }
+
+        table {
+            border-collapse: separate;
+            border-spacing: 0;
+            width: 100%;
+            min-width: 600px;
+        }
+
+        thead {
+            position: sticky;
+            top: 0;
+            background: var(--panel);
+            z-index: 1;
+        }
+
+        th,
+        td {
+            border-bottom: 1px solid var(--border);
+            padding: 8px 10px;
+            text-align: left;
+            vertical-align: top;
+            font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+            font-size: 12px;
+            white-space: nowrap;
+        }
+
+        th {
+            color: var(--muted);
+            font-weight: 600;
+            position: sticky;
+            top: 0;
+        }
+
+        tbody tr:hover {
+            background: var(--panel-2);
+        }
+
+        .empty,
+        .error {
+            color: var(--muted);
+            padding: 16px;
+            font-style: italic;
+        }
+
+        .owner-badge {
+            padding: 2px 6px;
+            border-radius: 999px;
+            border: 1px solid var(--border);
+            background: rgba(255, 255, 255, 0.03);
+            font-size: 11px;
+            color: var(--text);
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <h1>Captain Logs</h1>
+        <span class="status" id="headerStatus"></span>
+    </header>
+
+    <div class="container">
+        <aside class="sidebar">
+            <div class="search">
+                <input id="ownerFilter" type="text" placeholder="Filter owners...">
+            </div>
+            <div class="owners" id="owners"></div>
+        </aside>
+
+        <main class="main">
+            <div class="toolbar">
+                <div id="selection"><span class="owner-badge">Select an owner</span></div>
+                <div class="status" id="status">Idle</div>
+            </div>
+            <div class="table-wrap" id="tableWrap">
+                <div class="empty">No owner selected</div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const ownersEl = document.getElementById('owners')
+        const statusEl = document.getElementById('status')
+        const headerStatusEl = document.getElementById('headerStatus')
+        const tableWrapEl = document.getElementById('tableWrap')
+        const selectionEl = document.getElementById('selection')
+        const filterEl = document.getElementById('ownerFilter')
+
+        let owners = []
+        let filteredOwners = []
+        let selectedOwner = null
+
+        function setStatus(msg) { statusEl.textContent = msg }
+        function setHeaderStatus(msg) { headerStatusEl.textContent = msg }
+
+        async function fetchOwners() {
+            setHeaderStatus('Loading owners…')
+            try {
+                const res = await fetch('/api/logs/owners')
+                if (!res.ok) throw new Error('HTTP ' + res.status)
+                owners = await res.json()
+                if (!Array.isArray(owners)) owners = []
+                filteredOwners = owners.slice()
+                renderOwners()
+                setHeaderStatus(`${owners.length} owners`)
+                // Auto-select first owner if available
+                if (owners.length && !selectedOwner) {
+                    selectOwner(owners[0])
+                }
+            } catch (e) {
+                setHeaderStatus('Failed to load owners')
+                ownersEl.innerHTML = `<div class="error">Error loading owners</div>`
+                console.error(e)
+            }
+        }
+
+        function renderOwners() {
+            const q = (filterEl.value || '').toLowerCase().trim()
+            filteredOwners = owners.filter(o => ('' + o).toLowerCase().includes(q))
+            ownersEl.innerHTML = ''
+            if (!filteredOwners.length) {
+                ownersEl.innerHTML = `<div class="empty">No owners</div>`
+                return
+            }
+            for (const o of filteredOwners) {
+                const btn = document.createElement('button')
+                btn.className = 'owner-btn' + (o === selectedOwner ? ' active' : '')
+                btn.textContent = o
+                btn.title = o
+                btn.onclick = () => selectOwner(o)
+                ownersEl.appendChild(btn)
+            }
+        }
+
+        function sanitize(str) {
+            try { return ('' + str) } catch { return '' }
+        }
+
+        function orderColumns(cols) {
+            const preferred = ['time', 'timestamp', 'date', 'owner', 'level', 'message', 'msg']
+            const prefIndex = k => {
+                const i = preferred.indexOf(k.toLowerCase())
+                return i === -1 ? 999 : i
+            }
+            return cols.slice().sort((a, b) => {
+                const d = prefIndex(a) - prefIndex(b)
+                return d !== 0 ? d : a.localeCompare(b)
+            })
+        }
+
+        function renderLogs(logs) {
+            if (!Array.isArray(logs) || logs.length === 0) {
+                tableWrapEl.innerHTML = `<div class="empty">No logs</div>`
+                return
+            }
+            // Build column set from all rows to handle heterogeneous shapes
+            const colSet = new Set()
+            for (const row of logs) Object.keys(row || {}).forEach(k => colSet.add(k))
+            const cols = orderColumns(Array.from(colSet))
+
+            // Cap rows for performance
+            const MAX = 1000
+            const rows = logs.slice(0, MAX)
+
+            let html = '<table><thead><tr>'
+            for (const c of cols) html += `<th>${sanitize(c)}</th>`
+            html += '</tr></thead><tbody>'
+
+            for (const r of rows) {
+                html += '<tr>'
+                for (const c of cols) {
+                    let v = (r && r[c] !== undefined && r[c] !== null) ? r[c] : ''
+                    if (typeof v === 'object') v = JSON.stringify(v)
+                    html += `<td title="${sanitize(v)}">${sanitize(v)}</td>`
+                }
+                html += '</tr>'
+            }
+            html += '</tbody></table>'
+
+            const trimmed = logs.length > MAX ? ` Showing first ${MAX} of ${logs.length}.` : ''
+            tableWrapEl.innerHTML = html
+            setStatus(`Loaded ${rows.length} rows.${trimmed}`)
+        }
+
+        async function selectOwner(owner) {
+            selectedOwner = owner
+            renderOwners()
+            selectionEl.innerHTML = `<span class="owner-badge">${sanitize(owner)}</span>`
+            setStatus('Loading logs…')
+            try {
+                const res = await fetch('/api/logs/by_owner?owner=' + encodeURIComponent(owner))
+                if (!res.ok) throw new Error('HTTP ' + res.status)
+                const logs = await res.json()
+                renderLogs(logs)
+            } catch (e) {
+                console.error(e)
+                tableWrapEl.innerHTML = `<div class="error">Error loading logs for "${sanitize(owner)}"</div>`
+                setStatus('Failed')
+            }
+        }
+
+        filterEl.addEventListener('input', renderOwners)
+        fetchOwners();
+    </script>
+</body>
+
+</html>

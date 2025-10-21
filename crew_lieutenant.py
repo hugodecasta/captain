@@ -6,6 +6,7 @@ from boat_chest import CHORE_STATUS_PENDING, CHORE_STATUS_CANCEL_REQUESTED, CHOR
 from boat_chest import create_service
 from boat_chest import SAILOR_STATUS_DOWN
 from boat_chest import requires_root
+from boat_chest import get_logs_by_owner, get_logs_unique_owners
 import time
 
 import os
@@ -141,6 +142,17 @@ def start_front_server(port):
     def get_crew():
         crew = get_sailors()
         return jsonify(crew)
+
+    @app.route('/api/logs/owners', methods=['GET'])
+    def get_logs_owners():
+        owners = get_logs_unique_owners()
+        return jsonify(owners)
+
+    @app.route('/api/logs/by_owner', methods=['GET'])
+    def get_logs_by_owner_api():
+        owner = request.args.get("owner")
+        logs = get_logs_by_owner(owner)
+        return jsonify(logs)
 
     # chores
     @app.route('/api/chores/', methods=['GET'])

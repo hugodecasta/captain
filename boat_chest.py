@@ -132,6 +132,30 @@ def log_message(owner: str, message: str):
     conn.commit()
     conn.close()
 
+
+def get_logs_unique_owners():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT DISTINCT Owner FROM Logs")
+    owners = [row[0] for row in cursor.fetchall()]
+    conn.close()
+    return owners
+
+
+def get_logs_by_owner(owner: str):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM Logs WHERE Owner = ? ORDER BY Timestamp DESC", (owner,))
+    logs = cursor.fetchall()
+    conn.close()
+    logs_json = [{
+        "ID": l[0],
+        "Timestamp": l[1],
+        "Owner": l[2],
+        "Message": l[3]
+    } for l in logs]
+    return logs_json
+
 # region -------------------------------------------------------- UTILS
 # region --------------------------------------------------------
 # region --------------------------------------------------------

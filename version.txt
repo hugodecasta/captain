@@ -1,3 +1,8 @@
-v2.1.2
+v2.2.0
+------------------ v2.2.0
+
+Be able to see logs in the front
+
 ------------------ v2.1.2
+
 Bug fix - Sailor log their own name
