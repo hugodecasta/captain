@@ -1,4 +1,8 @@
-v2.2.6
+v2.2.7
+------------------ v2.2.7
+
+Removed over logging lieutenant elements
+
 ------------------ v2.2.6
 
 Fixed sailor representation

@@ -60,8 +60,9 @@ def assign_chore(chore, sailors):
         set_chore_infos(chore["ID"], f"Assigned to sailor {sailor_name}")
         log(f"Chore {chore['ID']} assigned to sailor {sailor_name}")
         return sailor_name
-    log(f"No available sailor found for chore {chore['ID']}")
-    set_chore_infos(chore["ID"], "No available sailor")
+    if chore["Infos"] != "No available sailor":
+        log(f"No available sailor found for chore {chore['ID']}")
+        set_chore_infos(chore["ID"], "No available sailor")
     return None
 
 
