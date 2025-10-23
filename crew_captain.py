@@ -126,6 +126,8 @@ if __name__ == "__main__":
 
     parser.add_argument('--small', action='store_true', required=False, help='Small display')
 
+    parser.add_argument('--json', action='store_true', required=False, help='JSON display')
+
     args = parser.parse_args()
 
     owner = os.getuid()
@@ -134,7 +136,9 @@ if __name__ == "__main__":
     if args.mode == 'consult':
         chores = consult(owner)
         is_small = args.small
-        if len(chores) == 0:
+        if args.json:
+            print(json.dumps(chores, indent=4))
+        elif len(chores) == 0:
             print("No chores found")
         else:
             headers = ["ID", "Owner", "RSlr", "RSrv", "CPUs", "GPUs", "WD", "SC", "Out", "Status", "Sailor", "Infos"]
@@ -171,7 +175,10 @@ if __name__ == "__main__":
         rsailor = args.rsailor if args.rsailor else None
         rservice = args.rservice if args.rservice else None
         chore_id = request_chore(owner, rsailor, rservice, configuration)
-        print(f"Chore requested with ID: {chore_id}")
+        if args.json:
+            print(json.dumps({"chore_id": chore_id}, indent=4))
+        else:
+            print(f"Chore requested with ID: {chore_id}")
 
     # region .... pre register sailor
     elif args.mode == 'prereg':
@@ -181,12 +188,17 @@ if __name__ == "__main__":
         sailor_name = args.name
         services = args.services if args.services else ""
         preregister_sailor(sailor_name, services)
-        print(f"Sailor {sailor_name} pre-registered with services: {services}")
+        if args.json:
+            print(json.dumps({"sailor_name": sailor_name, "services": services}, indent=4))
+        else:
+            print(f"Sailor {sailor_name} pre-registered with services: {services}")
 
     # region .... crew
     elif args.mode == 'crew':
         sailors = get_sailors()
-        if len(sailors) == 0:
+        if args.json:
+            print(json.dumps(sailors, indent=4))
+        elif len(sailors) == 0:
             print("No sailors found")
         else:
             headers = ["ID", "Name", "Services", "Status", "CPUS", "GPUS", "RAM"]

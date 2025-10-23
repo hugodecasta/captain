@@ -1,4 +1,8 @@
-v2.2.4
+v2.2.5
+------------------ v2.2.5
+
+Added json display option
+
 ------------------ v2.2.4
 
 Fix sailor service parsing
