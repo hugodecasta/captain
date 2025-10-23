@@ -1,4 +1,8 @@
-v2.2.5
+v2.2.6
+------------------ v2.2.6
+
+Fixed sailor representation
+
 ------------------ v2.2.5
 
 Added json display option

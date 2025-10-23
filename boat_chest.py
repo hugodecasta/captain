@@ -477,13 +477,13 @@ def parse_sailor(sailor_row):
         "ID": ID,
         "Name": name,
         "Services": services.split(','),
-        "CPUS": cpus,
-        "GPUS": gpus,
-        "RAM": ram,
-        "LastSeen": lastSeen,
-        "UsedCPUS": used_cpus,
-        "UsedGPUS": used_gpus,
-        "TimeOffset": time_offset,
+        "CPUS": int(cpus),
+        "GPUS": int(gpus),
+        "RAM": int(ram),
+        "LastSeen": int(lastSeen),
+        "UsedCPUS": int(used_cpus),
+        "UsedGPUS": int(used_gpus),
+        "TimeOffset": int(time_offset),
         "Status": get_sailor_status(lastSeen + time_offset, used_cpus)
     }
 
