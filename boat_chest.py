@@ -463,28 +463,28 @@ def get_sailor_status(last_seen: int, used_cpus: int) -> str:
 
 
 def parse_sailor(sailor_row):
-    gpus = sailor_row.get("GPUS", '-')
-    gpus = '-' if gpus is None else gpus
-    cpus = sailor_row.get("CPUS", '-')
-    cpus = '-' if cpus is None else cpus
-    used_gpus = sailor_row.get("UsedGPUS", '-')
-    used_gpus = '-' if used_gpus is None else used_gpus
-    used_cpus = sailor_row.get("UsedCPUS", '-')
-    used_cpus = '-' if used_cpus is None else used_cpus
-    ram = sailor_row.get("RAM", '-')
-    ram = '-' if ram is None else ram
-    lastSeen = int(sailor_row["LastSeen"]) + sailor_row.get("TimeOffset", 0)
+    ID = sailor_row[0]
+    name = sailor_row[1]
+    services = sailor_row[2]
+    cpus = sailor_row[3]
+    gpus = sailor_row[4]
+    ram = sailor_row[5]
+    lastSeen = sailor_row[6]
+    used_cpus = sailor_row[7]
+    used_gpus = sailor_row[8]
+    time_offset = sailor_row[9]
     return {
-        "ID": sailor_row["ID"],
-        "Name": sailor_row["Name"],
-        "Services": sailor_row["Services"],
+        "ID": ID,
+        "Name": name,
+        "Services": services,
         "CPUS": cpus,
         "GPUS": gpus,
         "RAM": ram,
         "LastSeen": lastSeen,
         "UsedCPUS": used_cpus,
         "UsedGPUS": used_gpus,
-        "Status": get_sailor_status(lastSeen, used_cpus)
+        "TimeOffset": time_offset,
+        "Status": get_sailor_status(lastSeen + time_offset, used_cpus)
     }
 
 
