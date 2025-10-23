@@ -114,6 +114,7 @@ def get_db_version_file_path():
 
 def get_db_version():
     path = get_db_version_file_path()
+    print(path)
     if not path.exists():
         return None
     with open(path, "r") as f:
@@ -364,6 +365,14 @@ def cancel_chore(chore_id: int):
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("UPDATE Chores SET Start = ?, End = ? WHERE ID = ?", (time.time(), -2, chore_id))
+    conn.commit()
+    conn.close()
+
+
+def set_sailor_time_offset(sailor_name: str, time_offset: int):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE Sailors SET TimeOffset = ? WHERE Name = ?", (time_offset, sailor_name))
     conn.commit()
     conn.close()
 

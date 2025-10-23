@@ -107,6 +107,7 @@ if __name__ == "__main__":
     mode_group.add_argument('--prereg', dest="mode", required=False, action='store_const', const='prereg', help='Display crew members')
     mode_group.add_argument('--rmsailor', dest="mode", required=False, action='store_const', const='rmsailor', help='Remove sailor')
     mode_group.add_argument('--cancel', dest="mode", required=False, action='store_const', const='cancel', help='Cancel chore')
+    mode_group.add_argument('--sailor-offset', dest="mode", required=False, action='store_const', const='sailor-offset', help='Set sailor time offset')
 
     parser.add_argument('-slr', '--rsailor', type=str, required=False, help='RSailor name')
     parser.add_argument('-srv', '--rservice', type=str, required=False, help='RService name')
@@ -118,6 +119,8 @@ if __name__ == "__main__":
 
     parser.add_argument('-n', '--name', type=str, required=False, help='Sailor name')
     parser.add_argument('-s', '--services', type=str, required=False, help='Comma separated list of services')
+
+    parser.add_argument('-off', '--offset', type=int, required=False, help='Sailor time offset in seconds')
 
     parser.add_argument('-cid', type=int, required=False, help='Chore ID to cancel')
 
@@ -201,3 +204,14 @@ if __name__ == "__main__":
         sailor_name = args.name
         captain_remove_sailor(sailor_name)
         print(f"Sailor {sailor_name} removed")
+
+    # region .... sailor time offset
+    elif args.mode == 'sailor-offset':
+        requires_root()
+        if not args.name or args.offset is None:
+            parser.error("the following arguments are required for 'sailor-offset' mode: -n/--name, -off/--offset")
+        sailor_name = args.name
+        time_offset = args.offset
+        from boat_chest import set_sailor_time_offset
+        set_sailor_time_offset(sailor_name, time_offset)
+        print(f"Sailor {sailor_name} time offset set to {time_offset} seconds")
