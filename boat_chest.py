@@ -106,13 +106,52 @@ def install_db(db_path: str):
 # region --------------------------------------------------------
 
 
-def get_db_connection():
+def get_db_version_file_path():
+    folder = str(get_db_path()).split('/')[0:-1]
+    path = os.path.join(*folder, "db_version.txt")
+    return Path(path)
+
+
+def get_db_version():
+    path = get_db_version_file_path()
+    if not path.exists():
+        return None
+    with open(path, "r") as f:
+        version = f.read().strip()
+    return version
+
+
+def set_db_version(version: str):
+    with open(get_db_version_file_path(), "w") as f:
+        f.write(version)
+
+
+def update_db():
+    version = get_db_version()
+
+    if version is None:
+        version = "1.0.0"
+        connection = get_db_connection()
+        cursor = connection.cursor()
+        # add timeoffset column to sailors
+        cursor.execute("ALTER TABLE Sailors ADD COLUMN TimeOffset INTEGER DEFAULT 0")
+        connection.commit()
+        connection.close()
+
+    set_db_version(version)
+
+
+def get_db_path():
     if not DB_PATH_FILE.exists():
         raise Exception("DB not setup. Please install the database first.")
-
     with open(DB_PATH_FILE, "r") as f:
         db_path = f.read().strip()
 
+    return db_path
+
+
+def get_db_connection():
+    db_path = get_db_path()
     conn = sqlite3.connect(db_path)
     return conn
 
@@ -420,7 +459,6 @@ def get_sailors():
     cursor.execute("SELECT * FROM Sailors")
     sailors = cursor.fetchall()
     conn.close()
-    timestamp = int(time.time())
     sailors_json = [{
         "ID": s[0],
         "Name": s[1],
@@ -428,7 +466,7 @@ def get_sailors():
         "CPUS": int(s[3]),
         "GPUS": int(s[4]),
         "RAM": int(s[5]),
-        "LastSeen": int(s[6]),
+        "LastSeen": int(s[6]) + int(s[9]),  # add time offset
         "UsedCPUS": int(s[7]),
         "UsedGPUS": int(s[8]),
         "Status": get_sailor_status(s[6], s[7])

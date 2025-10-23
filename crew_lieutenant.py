@@ -7,6 +7,7 @@ from boat_chest import create_service
 from boat_chest import SAILOR_STATUS_DOWN
 from boat_chest import requires_root
 from boat_chest import get_logs_by_owner, get_logs_unique_owners
+from boat_chest import update_db
 import time
 
 import os
@@ -94,6 +95,10 @@ def create_service_lieutenant():
         "/usr/local/bin/lieutenant",
     )
 
+
+def verify_db_version():
+    update_db()
+
 # region -------------------------------------------------------- LOOP
 # region --------------------------------------------------------
 # region --------------------------------------------------------
@@ -103,6 +108,7 @@ def create_service_lieutenant():
 
 def loop():
     log("Lieutenant started")
+    verify_db_version()
     while True:
         assign_chores()
         archive_chores()

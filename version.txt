@@ -1,4 +1,9 @@
 v2.2.0
+------------------ v2.2.1
+
+Added time offset on time delayed sailors
+(for status estimation)
+
 ------------------ v2.2.0
 
 Roll back to using root
