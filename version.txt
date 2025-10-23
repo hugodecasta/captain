@@ -1,4 +1,8 @@
-v2.2.2
+v2.2.3
+------------------ v2.2.3
+
+Updated sailor parsing
+
 ------------------ v2.2.2
 
 Allow captain to update sailor time offset

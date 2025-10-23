@@ -462,24 +462,39 @@ def get_sailor_status(last_seen: int, used_cpus: int) -> str:
         return SAILOR_STATUS_READY
 
 
+def parse_sailor(sailor_row):
+    gpus = sailor_row.get("GPUS", '-')
+    gpus = '-' if gpus is None else gpus
+    cpus = sailor_row.get("CPUS", '-')
+    cpus = '-' if cpus is None else cpus
+    used_gpus = sailor_row.get("UsedGPUS", '-')
+    used_gpus = '-' if used_gpus is None else used_gpus
+    used_cpus = sailor_row.get("UsedCPUS", '-')
+    used_cpus = '-' if used_cpus is None else used_cpus
+    ram = sailor_row.get("RAM", '-')
+    ram = '-' if ram is None else ram
+    lastSeen = int(sailor_row["LastSeen"]) + sailor_row.get("TimeOffset", 0)
+    return {
+        "ID": sailor_row["ID"],
+        "Name": sailor_row["Name"],
+        "Services": sailor_row["Services"],
+        "CPUS": cpus,
+        "GPUS": gpus,
+        "RAM": ram,
+        "LastSeen": lastSeen,
+        "UsedCPUS": used_cpus,
+        "UsedGPUS": used_gpus,
+        "Status": get_sailor_status(lastSeen, used_cpus)
+    }
+
+
 def get_sailors():
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("SELECT * FROM Sailors")
     sailors = cursor.fetchall()
     conn.close()
-    sailors_json = [{
-        "ID": s[0],
-        "Name": s[1],
-        "Services": [sr.strip() for sr in s[2].split(',')],
-        "CPUS": int(s[3]),
-        "GPUS": int(s[4]),
-        "RAM": int(s[5]),
-        "LastSeen": int(s[6]) + int(s[9]),  # add time offset
-        "UsedCPUS": int(s[7]),
-        "UsedGPUS": int(s[8]),
-        "Status": get_sailor_status(s[6], s[7])
-    } for s in sailors]
+    sailors_json = [parse_sailor(s) for s in sailors]
     return sailors_json
 
 
