@@ -476,7 +476,7 @@ def parse_sailor(sailor_row):
     return {
         "ID": ID,
         "Name": name,
-        "Services": services,
+        "Services": services.split(','),
         "CPUS": cpus,
         "GPUS": gpus,
         "RAM": ram,
