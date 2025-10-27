@@ -54,6 +54,11 @@ def assign_chore(chore, sailors):
 
         print(sailor_name, available_cpus, available_gpus, rcpus, rgpus)
 
+        if rcpus == -1:
+            rcpus = available_cpus
+        if rgpus == -1:
+            rgpus = available_gpus
+
         if available_cpus < rcpus or available_gpus < rgpus:
             continue
 

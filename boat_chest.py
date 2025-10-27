@@ -361,7 +361,14 @@ def add_chore(owner: str, rsailor: str, rservice: str, configuration: str):
     return chore_id
 
 
-def cancel_chore(chore_id: int):
+def cancel_chore(chore_id: int, filters=[]):
+    if chore_id == -1:
+        chores = get_chores()
+        for chore in chores:
+            status = get_chore_status(chore)
+            if status in filters:
+                cancel_chore(chore["ID"], [])
+        return
     conn = get_db_connection()
     cursor = conn.cursor()
     cursor.execute("UPDATE Chores SET Start = ?, End = ? WHERE ID = ?", (time.time(), -2, chore_id))

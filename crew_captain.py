@@ -41,9 +41,10 @@ def captain_remove_sailor(sailor_name: str):
     remove_sailor(sailor_name)
 
 
-def captain_cancel_chore(chore_id: int):
-    log(f"Cancelling chore {chore_id}")
-    cancel_chore(chore_id)
+def captain_cancel_chore(chore_id: int, filters: str):
+    filters = filters.split(",") if filters else []
+    log(f"Cancelling chore {chore_id} with filters: {filters}")
+    cancel_chore(chore_id, filters)
 
 # region -------------------------------------------------------- ARGS
 # region --------------------------------------------------------
@@ -122,7 +123,8 @@ if __name__ == "__main__":
 
     parser.add_argument('-off', '--offset', type=int, required=False, help='Sailor time offset in seconds')
 
-    parser.add_argument('-cid', type=int, required=False, help='Chore ID to cancel')
+    parser.add_argument('-cid', type=int, required=False, help='Chore ID to cancel (-1 for all)')
+    parser.add_argument('-f', '--filter', type=str, required=False, help='Filter chores by status', default="")
 
     parser.add_argument('--small', action='store_true', required=False, help='Small display')
 
@@ -155,7 +157,8 @@ if __name__ == "__main__":
         if not args.cid:
             parser.error("the following arguments are required for 'cancel' mode: -cid")
         chore_id = args.cid
-        captain_cancel_chore(chore_id)
+        filters = args.filter
+        captain_cancel_chore(chore_id, filters)
         print(f"Chore {chore_id} cancellation requested")
 
     # region .... chore

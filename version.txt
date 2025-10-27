@@ -1,4 +1,9 @@
 v2.2.9
+------------------ v2.3.0
+
+Enables to request full sailor ressource using -1 (cpu and gpu)
+Allows the user to cancel all jobs per filter in captain --cancel
+
 ------------------ v2.2.9
 
 Fixed lieutenant ressource allocation
