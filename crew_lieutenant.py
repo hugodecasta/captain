@@ -80,8 +80,12 @@ def assign_chore(chore, sailors):
 def assign_chores():
     sailors = get_sailors()
     chores = get_chores()
+    assigned = False
     for chore in chores:
-        assign_chore(chore, sailors)
+        assigned = assign_chore(chore, sailors) is not None
+    if assigned:
+        log("Some chores were assigned")
+        time.sleep(5)
 
 
 def archive_chores():
