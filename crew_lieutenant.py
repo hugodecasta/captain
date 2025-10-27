@@ -56,6 +56,10 @@ def assign_chore(chore, sailors):
 
         if available_cpus < rcpus or available_gpus < rgpus:
             continue
+
+        candidate["UsedCPUS"] += rcpus
+        candidate["UsedGPUS"] += rgpus
+
         assign_chore_sailor(chore["ID"], sailor_name)
         set_chore_infos(chore["ID"], f"Assigned to sailor {sailor_name}")
         log(f"Chore {chore['ID']} assigned to sailor {sailor_name}")

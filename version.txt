@@ -1,4 +1,8 @@
-v2.2.8
+v2.2.9
+------------------ v2.2.9
+
+Fixed lieutenant ressource allocation
+
 ------------------ v2.2.8
 
 Updated sailor registration with timestamp 0

@@ -1,4 +1,4 @@
-# Captain/Sailor
+# Captain
 
 A minimal resource scheduler with a Captain (controller) and Sailors (workers).
 
