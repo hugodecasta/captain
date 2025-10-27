@@ -89,12 +89,13 @@ sudo service sailor status
 In order to pull all updates, use the update command
 ```bash
 cd captain
+git pull
 ./update.sh
 ```
 
 Don't forget to restart all service related to the boat(`sailor`, `lieutenant`)
 
-## Usage
+## Usage on captain machine
 
 ### User
 
@@ -112,4 +113,10 @@ captain --consult [--small]
 
 ```bash
 captain --cancel -cid <chore ID>
+```
+
+### Admin
+
+```bash
+captain --prereg -n <sailor name> -s SERVICE1,SERVICE2,...
 ```
