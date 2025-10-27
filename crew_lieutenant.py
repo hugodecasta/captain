@@ -1,6 +1,6 @@
 from boat_chest import get_chores, get_sailors
 from boat_chest import get_sailors_by_service, get_sailor_available_cpus, get_sailor_available_gpus, get_sailor_by_name
-from boat_chest import get_chore_requested_ressources, assign_chore_sailor, get_chore_status, set_chore_infos, archive_chore
+from boat_chest import get_chore_requested_ressources, assign_chore_sailor, get_chore_status, set_chore_infos, archive_chore, change_chore_ressources
 from boat_chest import log_message
 from boat_chest import CHORE_STATUS_PENDING, CHORE_STATUS_CANCEL_REQUESTED, CHORE_STATUS_ASSIGNED, CHORE_STATUS_RUNNING, CHORE_STATUS_COMPLETED, CHORE_STATUS_FAILED
 from boat_chest import create_service
@@ -61,6 +61,8 @@ def assign_chore(chore, sailors):
 
         if available_cpus < rcpus or available_gpus < rgpus:
             continue
+
+        change_chore_ressources(chore["ID"], rcpus, rgpus)
 
         candidate["UsedCPUS"] += rcpus
         candidate["UsedGPUS"] += rgpus

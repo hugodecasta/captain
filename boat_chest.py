@@ -417,6 +417,20 @@ def remove_chore(chore_id: int):
     conn.commit()
     conn.close()
 
+
+def change_chore_ressources(chore_id: int, cpus: int, gpus: int):
+    chore = get_chore_by_id(chore_id)
+    if chore is None:
+        return
+    config = json.loads(chore["configuration"])
+    config["cpus"] = cpus
+    config["gpus"] = gpus
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE Chores SET configuration = ? WHERE ID = ?", (json.dumps(config), chore_id))
+    conn.commit()
+    conn.close()
+
 # region .... for sailor
 
 
