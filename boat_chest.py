@@ -236,7 +236,7 @@ def create_service(name, description, command):
         f"ExecStart={command}",
         "Restart=on-failure",
         "Environment=PYTHONUNBUFFERED=1",
-        f"User=Root",
+        f"User=root",
         "",
         "[Install]",
         "WantedBy=multi-user.target",
