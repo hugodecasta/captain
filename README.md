@@ -23,13 +23,13 @@ Install the system
 sudo ./install.sh
 ```
 
+### Lieutenant
+
 Install the registry.\
 The registry is a database accessible to all your system. It should be stored in a common area. Once setup, you will need to declare its location to all your crew (captain, lieutenant and sailors).
 ```bash
 sudo captain --install-db <path to db>
 ```
-
-### Lieutenant
 
 The lieutenant will take care of the day to day chores assignement and archiving. It needs to know where the registry be able to run forever.
 
@@ -48,6 +48,8 @@ sudo service lieutenant status
 
 ### Sailor
 
+#### On the captain machine
+
 In order to add a sailor in the crew, one first need to declare it to the captain using the pre-register command
 
 Declare the registry
@@ -55,9 +57,16 @@ Declare the registry
 sudo captain --prereg -n <name> -s <comma separated services>
 ```
 
+#### On the sailor machine
+
 Once the sailor as been preregistered, you can setup the sailor on its own machine.
 
-[`install and declare db`](#common-installation)
+[`install`](#common-installation)
+
+Install the registry.
+```bash
+sudo sailor --install-db <path to db>
+```
 
 Setup the local sailor data
 ```bash

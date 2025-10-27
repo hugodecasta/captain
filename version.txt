@@ -1,4 +1,9 @@
-v2.2.7
+v2.2.8
+------------------ v2.2.8
+
+Updated sailor registration with timestamp 0
+(avoid creating a false "READY" sailor in the first 10 seconds)
+
 ------------------ v2.2.7
 
 Removed over logging lieutenant elements

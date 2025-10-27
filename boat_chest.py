@@ -531,7 +531,7 @@ def get_sailor_by_name(sailor_name: str, sailors=None):
 def pre_register_sailor(name: str, services: str):
     conn = get_db_connection()
     cursor = conn.cursor()
-    timestamp = int(time.time())
+    timestamp = 0
     cursor.execute("""
     INSERT INTO Sailors (Name, Services, CPUS, GPUS, RAM, LastSeen, UsedCPUS, UsedGPUS)
     VALUES (?, ?, 0, 0, 0, ?, 0, 0)
